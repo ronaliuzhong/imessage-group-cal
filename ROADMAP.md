@@ -30,11 +30,54 @@ same synced calendar data instead of each fetching its own.
 
 ### Phase 1 follow-ups
 
-- Google OAuth verification. Until then the app is in Testing mode: at most
-  100 test users, each added by hand, and everyone's Google connection
-  expires every 7 days.
+- Google OAuth verification (see below).
 - Calendar drag: scroll the calendar while dragging near its top or bottom
   edge, and add handles to adjust a picked time range.
+
+## Testing plan
+
+The main round of testing happens on the native versions, but the web app
+gets a light test first because it's the engine they all run on.
+
+1. **Light web test:** 2–3 friends use the web app for real plans for about
+   a week, to find backend bugs while they're cheap to fix in one place.
+2. **Google verification**, started in the background (below).
+3. **Phase 2 testers get the iMessage extension through TestFlight**
+   (Apple's beta testing; up to 10,000 testers). Needs an Apple Developer
+   account ($99/year) and Xcode.
+
+Google's Testing-mode limits apply to the native apps too: they sign in with
+the same Google project.
+
+## Google verification
+
+- **One review covers the web and native apps.** Google verifies the Google
+  Cloud project, not each client. Changing the requested permissions, app
+  name or logo means another review.
+- Our calendar scopes are **sensitive, not restricted**: Google reviews them
+  itself, with no paid outside security audit.
+- **Testing mode** (now): at most 100 test users, each added by hand, and
+  everyone's Google connection expires every 7 days.
+- **Published but not yet verified:** anyone can sign in (no list) and
+  connections stop expiring weekly, but people see an "unverified app"
+  warning, and there's a 100-user cap.
+
+Steps:
+
+1. Buy a domain and connect it to Vercel (`.vercel.app` can't be verified
+   as ours).
+2. Add a public homepage and a privacy policy page on that domain. The
+   policy must say exactly what Google data is used and why (free/busy
+   only, never event details).
+3. Verify the domain in Google Search Console.
+4. Add the domain to the OAuth client's origins and redirect URIs.
+5. Google Auth Platform → **Branding** (name, logo, homepage, privacy
+   policy, authorized domain) and **Data Access** (each scope with a
+   one-sentence reason).
+6. Record a demo video (unlisted YouTube): the Google consent screen, then
+   each permission in use.
+7. **Audience → Publish app**, then submit in the **Verification Center**.
+   Expect a few days to a few weeks, and follow-up emails.
 
 ## What this means for Phase 1
 
