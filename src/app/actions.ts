@@ -368,8 +368,58 @@ async function splitPlan(plan: EditablePlan, splitAt: Date, fields: PlanFields):
   return continued.shareCode;
 }
 
+// How long after cancelling "Undo" still works. The button only shows for 5
+// seconds; the extra time allows for a slow connection.
+const UNDO_WINDOW_MS = 2 * 60_000;
+
+type SavedException = {
+  originalStart: string;
+  cancelled: boolean;
+  title: string | null;
+  location: string | null;
+  notes: string | null;
+  start: string | null;
+  end: string | null;
+};
+
+// What a cancellation changed, saved so it can be undone.
+export type CancelSnapshot =
+  | { scope: "all" }
+  | { scope: "this"; originalStart: string; previous: SavedException | null }
+  | {
+      scope: "following";
+      originalStart: string;
+      repeatUntil: string | null;
+      repeatCount: number | null;
+      seriesEnd: string | null;
+      exceptions: SavedException[];
+      dateRsvps: { userId: string; originalStart: string; response: "GOING" | "NOT_GOING" }[];
+    };
+
+const saveException = (e: EditablePlan["exceptions"][number]): SavedException => ({
+  originalStart: e.originalStart.toISOString(),
+  cancelled: e.cancelled,
+  title: e.title,
+  location: e.location,
+  notes: e.notes,
+  start: e.start?.toISOString() ?? null,
+  end: e.end?.toISOString() ?? null,
+});
+
+const restoreException = (planId: string, e: SavedException) => ({
+  planId,
+  originalStart: new Date(e.originalStart),
+  cancelled: e.cancelled,
+  title: e.title,
+  location: e.location,
+  notes: e.notes,
+  start: e.start ? new Date(e.start) : null,
+  end: e.end ? new Date(e.end) : null,
+});
+
 // Cancels a plan, or for repeating plans just this date / this date and
 // every later one. Takes it off everyone's Google Calendar. Any member can.
+// Afterwards it goes back to the group's calendar, which offers "Undo".
 export async function cancelPlan(planId: string, scope: EditScope = "all", occurrence?: string | null) {
   const user = await requireUser();
   const plan = await editablePlan(planId, user.id);
@@ -382,21 +432,107 @@ export async function cancelPlan(planId: string, scope: EditScope = "all", occur
     !originalStart ||
     (scope === "following" && originalStart.getTime() === plan.start.getTime());
 
+  let snapshot: CancelSnapshot;
   if (cancelAll) {
+    snapshot = { scope: "all" };
     await prisma.plan.update({ where: { id: plan.id }, data: { cancelledAt: new Date() } });
   } else if (scope === "this") {
+    const previous = plan.exceptions.find((e) => e.originalStart.getTime() === originalStart!.getTime());
+    snapshot = {
+      scope: "this",
+      originalStart: originalStart!.toISOString(),
+      previous: previous ? saveException(previous) : null,
+    };
     await prisma.planException.upsert({
       where: { planId_originalStart: { planId: plan.id, originalStart: originalStart! } },
       create: { planId: plan.id, originalStart: originalStart!, cancelled: true },
       update: { cancelled: true },
     });
   } else {
+    // "This and following" also removes per-date changes and answers from
+    // this date on, so save those too.
+    const dateRsvps = await prisma.occurrenceRsvp.findMany({
+      where: { planId: plan.id, originalStart: { gte: originalStart! } },
+    });
+    snapshot = {
+      scope: "following",
+      originalStart: originalStart!.toISOString(),
+      repeatUntil: plan.repeatUntil,
+      repeatCount: plan.repeatCount,
+      seriesEnd: plan.seriesEnd?.toISOString() ?? null,
+      exceptions: plan.exceptions.filter((e) => e.originalStart >= originalStart!).map(saveException),
+      dateRsvps: dateRsvps.map((r) => ({
+        userId: r.userId,
+        originalStart: r.originalStart.toISOString(),
+        response: r.response,
+      })),
+    };
     await endPlanBefore(plan, originalStart!);
     await dropStaleDates(plan.id, originalStart!, () => false);
   }
+
+  // Clear out old undo records while we're here, then save this one.
+  await prisma.cancelUndo.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - UNDO_WINDOW_MS) } } });
+  const undo = await prisma.cancelUndo.create({ data: { planId: plan.id, userId: user.id, snapshot } });
+
   await syncPlanForEveryone(plan.id);
   revalidatePath("/", "layout");
-  redirect(`/p/${plan.shareCode}`);
+  redirect(`/groups/${plan.groupId}?undo=${undo.id}`);
+}
+
+// Puts back whatever a cancellation changed, and re-adds it to everyone's
+// Google Calendar. Only the person who cancelled, and only shortly after.
+export async function undoCancel(undoId: string): Promise<{ ok: true } | { error: string }> {
+  const user = await requireUser();
+  const undo = await prisma.cancelUndo.findUnique({ where: { id: undoId } });
+  if (!undo || undo.userId !== user.id || Date.now() - undo.createdAt.getTime() > UNDO_WINDOW_MS) {
+    return { error: "It's too late to undo that." };
+  }
+  const planId = undo.planId;
+  const snapshot = undo.snapshot as CancelSnapshot;
+
+  if (snapshot.scope === "all") {
+    await prisma.plan.update({ where: { id: planId }, data: { cancelledAt: null } });
+  } else if (snapshot.scope === "this") {
+    const originalStart = new Date(snapshot.originalStart);
+    if (snapshot.previous) {
+      const restored = restoreException(planId, snapshot.previous);
+      await prisma.planException.update({
+        where: { planId_originalStart: { planId, originalStart } },
+        data: restored,
+      });
+    } else {
+      await prisma.planException.deleteMany({ where: { planId, originalStart } });
+    }
+  } else {
+    await prisma.plan.update({
+      where: { id: planId },
+      data: {
+        repeatUntil: snapshot.repeatUntil,
+        repeatCount: snapshot.repeatCount,
+        seriesEnd: snapshot.seriesEnd ? new Date(snapshot.seriesEnd) : null,
+      },
+    });
+    await prisma.planException.createMany({
+      data: snapshot.exceptions.map((e) => restoreException(planId, e)),
+      skipDuplicates: true,
+    });
+    // Their separate Google events were deleted; the sync below re-adds them.
+    await prisma.occurrenceRsvp.createMany({
+      data: snapshot.dateRsvps.map((r) => ({
+        planId,
+        userId: r.userId,
+        originalStart: new Date(r.originalStart),
+        response: r.response,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  await prisma.cancelUndo.delete({ where: { id: undoId } });
+  await syncPlanForEveryone(planId);
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
 
 // Anyone signed in who has the plan link can RSVP, matching who can view it.

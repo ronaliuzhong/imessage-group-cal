@@ -14,11 +14,23 @@ import { loadCalendarPlans } from "@/lib/plans";
 import { responsesFor, ruleOf, upcomingResolved } from "@/lib/plan-occurrences";
 import { repeatLabel } from "@/lib/recurrence";
 import { requireUser } from "@/lib/session";
+import type { CancelSnapshot } from "@/app/actions";
+import { CancelToast } from "@/components/cancel-toast";
 
 export default async function GroupPage({ params, searchParams }: PageProps<"/groups/[id]">) {
   const viewer = await requireUser();
   const { id } = await params;
-  const weekOffset = parseWeekOffset((await searchParams).week);
+  const query = await searchParams;
+  const weekOffset = parseWeekOffset(query.week);
+  // Just cancelled something (?undo=…): show the note with "Undo".
+  const undo =
+    typeof query.undo === "string"
+      ? await prisma.cancelUndo.findFirst({
+          where: { id: query.undo, userId: viewer.id, plan: { groupId: id } },
+          include: { plan: { select: { title: true } } },
+        })
+      : null;
+  const undoSnapshot = undo?.snapshot as CancelSnapshot | undefined;
 
   const group = await prisma.group.findUnique({
     where: { id },
@@ -61,6 +73,14 @@ export default async function GroupPage({ params, searchParams }: PageProps<"/gr
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
       <AppHeader userName={viewer.name} />
+      {undo && undoSnapshot && (
+        <CancelToast
+          undoId={undo.id}
+          title={undo.plan.title}
+          scope={undoSnapshot.scope}
+          date={undoSnapshot.scope === "all" ? null : undoSnapshot.originalStart}
+        />
+      )}
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>

@@ -168,6 +168,7 @@ model Plan {
   rsvps       Rsvp[]
   occurrenceRsvps OccurrenceRsvp[]
   exceptions  PlanException[]
+  cancelUndos CancelUndo[]
   createdAt   DateTime @default(now())
 
   group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -192,6 +193,18 @@ model PlanException {
   plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@id([planId, originalStart])
+}
+
+// What a cancellation changed, so the "Undo" button shown right afterwards
+// can put it back. Only kept briefly (see UNDO_WINDOW_MS in src/app/actions.ts).
+model CancelUndo {
+  id        String   @id @default(cuid())
+  planId    String
+  userId    String // only the person who cancelled can undo
+  snapshot  Json // see CancelSnapshot in src/app/actions.ts
+  createdAt DateTime @default(now())
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
 }
 
 enum RsvpResponse {
