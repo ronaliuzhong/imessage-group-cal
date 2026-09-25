@@ -45,6 +45,8 @@ const DURATIONS = [30, 60, 90, 120, 180, 240, 360];
 
 function durationLabel(minutes: number) {
   if (minutes < 60) return `${minutes} min`;
+  // Odd lengths (e.g. dragged on the calendar) read as "2 hr 15 min".
+  if (minutes % 60) return `${Math.floor(minutes / 60)} hr ${minutes % 60} min`;
   const hours = minutes / 60;
   return `${hours} ${hours === 1 ? "hour" : "hours"}`;
 }

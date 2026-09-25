@@ -19,6 +19,9 @@ type Props = {
   variant: "personal" | "group";
   // If set, clicking the calendar picks a start time (snapped to the half hour).
   onPickTime?: (start: Date) => void;
+  // If set, dragging down a day (on a phone: press and hold, then drag) picks
+  // a whole time range (snapped to 15 minutes).
+  onPickRange?: (start: Date, end: Date) => void;
   // A time range to outline, e.g. the plan being proposed.
   selection?: { start: Date; end: Date } | null;
   // Group plans, drawn as purple blocks with their names on top of everything.
@@ -35,7 +38,22 @@ type Hover =
 // screen instead (with a button to propose that time).
 type Tapped = { segment: Segment; start: Date; weekOffset: number };
 
+// A press on a day column that may turn into a drag. `range` (minutes into
+// that day) is set once it does.
+type Press = {
+  day: number;
+  downY: number;
+  downMinute: number;
+  touch: boolean;
+  timer?: number;
+  range: { start: number; end: number } | null;
+};
+
 const SNAP_MINUTES = 30;
+const DRAG_SNAP_MINUTES = 15;
+const LONG_PRESS_MS = 450; // phones: hold this long to start a drag
+const MOVE_PX = 8; // moving less than this still counts as a click/tap
+const DAY_MINUTES = 24 * 60;
 // Phone-sized: narrow hour labels. From the `sm` breakpoint up: roomier.
 const COLUMNS = "grid-cols-[2.25rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]";
 // Fits a phone screen, capped at the desktop height.
@@ -67,6 +85,27 @@ function minutesIntoDay(date: Date) {
   return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
 }
 
+// A time on the given day, `minutes` after its midnight.
+function atMinute(day: Date, minutes: number) {
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);
+}
+
+// The range a press covers with the pointer at `minute`, snapped to 15 minutes.
+function rangeFor(press: Press, minute: number) {
+  const snap = (m: number, round: (x: number) => number) => round(m / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
+  const latestStart = DAY_MINUTES - DRAG_SNAP_MINUTES;
+  if (press.touch) {
+    // Phones: holding drops a 1-hour block, then dragging moves its end.
+    const start = Math.min(snap(press.downMinute, Math.floor), latestStart);
+    const end = snap(start + 60 + minute - press.downMinute, Math.round);
+    return { start, end: Math.min(Math.max(end, start + DRAG_SNAP_MINUTES), DAY_MINUTES) };
+  }
+  // Mouse: from where the button went down to where the pointer is now.
+  const start = Math.min(snap(Math.min(press.downMinute, minute), Math.floor), latestStart);
+  const end = snap(Math.max(press.downMinute, minute), Math.ceil);
+  return { start, end: Math.min(Math.max(end, start + DRAG_SNAP_MINUTES), DAY_MINUTES) };
+}
+
 // "Thu, Oct 1 · 7:00 – 9:30 PM" (or with both dates if it spans days).
 function formatRange(start: Date, end: Date) {
   const sameDay = start.toDateString() === end.toDateString() || minutesIntoDay(end) === 0;
@@ -81,6 +120,7 @@ function CalendarGrid({
   weekOffset,
   variant,
   onPickTime,
+  onPickRange,
   selection,
   plans = [],
   showPlanGroup = false,
@@ -90,10 +130,43 @@ function CalendarGrid({
   const [tapped, setTapped] = useState<Tapped | null>(null);
   // Whether the latest press was a finger (vs. a mouse), read when the click lands.
   const touchRef = useRef(false);
+  // The press in progress; `drag` mirrors its range so it gets drawn.
+  const pressRef = useRef<Press | null>(null);
+  const [drag, setDrag] = useState<{ day: number; start: number; end: number } | null>(null);
+  // A finished drag also fires a click; this swallows it.
+  const suppressClickRef = useRef(false);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: INITIAL_SCROLL_HOUR * HOUR_PX });
   }, []);
+
+  // While dragging with a finger, stop the calendar scrolling underneath it.
+  // React only attaches "passive" touch listeners, which can't do this.
+  useEffect(() => {
+    const box = scrollRef.current;
+    const holdStill = (e: TouchEvent) => {
+      if (pressRef.current?.range) e.preventDefault();
+    };
+    box?.addEventListener("touchmove", holdStill, { passive: false });
+    return () => box?.removeEventListener("touchmove", holdStill);
+  }, []);
+
+  function updateDrag(press: Press, range: { start: number; end: number }) {
+    press.range = range;
+    setDrag({ day: press.day, ...range });
+  }
+
+  function cancelPress() {
+    clearTimeout(pressRef.current?.timer);
+    pressRef.current = null;
+    setDrag(null);
+  }
+
+  // Minutes after midnight at the pointer, within the column it's pressing on.
+  function minuteAt(e: React.PointerEvent<HTMLElement>) {
+    const offsetPx = e.clientY - e.currentTarget.getBoundingClientRect().top;
+    return Math.min(Math.max(offsetPx / MINUTE_PX, 0), DAY_MINUTES);
+  }
 
   // Sunday through Saturday of the current week (plus 7 days per week of
   // offset), in local time. getDay() is 0 on Sunday, so subtracting it lands on
@@ -120,13 +193,26 @@ function CalendarGrid({
   // Left over from a different week (after tapping ‹ Prev / Next ›)? Hide it.
   const tappedNow = tapped?.weekOffset === weekOffset ? tapped : null;
 
+  // How many people are free for the whole range being dragged.
+  const dragFree = drag
+    ? connected.length -
+      new Set(
+        computeSegments(
+          connected.map((m) => ({ memberId: m.id, busy: m.busy! })),
+          atMinute(days[drag.day], drag.start).getTime(),
+          atMinute(days[drag.day], drag.end).getTime(),
+        ).flatMap((s) => s.busyMemberIds),
+      ).size
+    : 0;
+
   return (
     <div className="flex flex-col gap-3">
       <WeekNav weekOffset={weekOffset} first={days[0]} last={days[6]} />
 
       <div
         ref={scrollRef}
-        className={`${HEIGHT} overflow-y-auto rounded-xl border border-zinc-200 dark:border-zinc-800`}
+        // No text selection or iPhone "copy" menu when pressing and holding.
+        className={`${HEIGHT} select-none overflow-y-auto rounded-xl border border-zinc-200 [-webkit-touch-callout:none] dark:border-zinc-800`}
       >
         {/* Day names row: stays pinned while the hours scroll underneath. */}
         <div className={`sticky top-0 z-10 grid ${COLUMNS} border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950`}>
@@ -172,14 +258,58 @@ function CalendarGrid({
                 style={{ height: 24 * HOUR_PX }}
                 onPointerDown={(e) => {
                   touchRef.current = e.pointerType !== "mouse";
+                  suppressClickRef.current = false;
+                  if (!onPickRange || (e.pointerType === "mouse" && e.button !== 0)) return;
+                  const press: Press = {
+                    day: i,
+                    downY: e.clientY,
+                    downMinute: minuteAt(e),
+                    touch: touchRef.current,
+                    range: null,
+                  };
+                  if (press.touch) {
+                    // Only a press held still starts a drag; a quick swipe scrolls.
+                    press.timer = window.setTimeout(() => {
+                      setTapped(null);
+                      updateDrag(press, rangeFor(press, press.downMinute));
+                    }, LONG_PRESS_MS);
+                  } else {
+                    // Keep getting moves even if the mouse leaves this column.
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  }
+                  pressRef.current = press;
                 }}
+                onPointerMove={(e) => {
+                  const press = pressRef.current;
+                  if (!press) return;
+                  if (!press.range) {
+                    if (Math.abs(e.clientY - press.downY) < MOVE_PX) return;
+                    // A finger moving before the hold finishes is scrolling.
+                    if (press.touch) return cancelPress();
+                    setHover(null);
+                  }
+                  updateDrag(press, rangeFor(press, minuteAt(e)));
+                }}
+                onPointerUp={() => {
+                  const press = pressRef.current;
+                  cancelPress();
+                  if (!press?.range || !onPickRange) return;
+                  suppressClickRef.current = true;
+                  onPickRange(atMinute(dayStart, press.range.start), atMinute(dayStart, press.range.end));
+                }}
+                onPointerCancel={cancelPress}
+                // Phones: holding a finger down would otherwise open a menu.
+                onContextMenu={(e) => onPickRange && touchRef.current && e.preventDefault()}
                 onClick={(e) => {
+                  if (suppressClickRef.current) {
+                    suppressClickRef.current = false;
+                    return;
+                  }
                   // Where in the column was clicked → minutes after midnight.
                   const offsetPx = e.clientY - e.currentTarget.getBoundingClientRect().top;
                   const exact = offsetPx / MINUTE_PX;
                   const snapped = Math.floor(exact / SNAP_MINUTES) * SNAP_MINUTES;
-                  const at = (minutes: number) =>
-                    new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), 0, minutes);
+                  const at = (minutes: number) => atMinute(dayStart, minutes);
                   if (touchRef.current) {
                     const tappedAt = at(exact).getTime();
                     const segment = segments.find((s) => s.start <= tappedAt && s.end > tappedAt);
@@ -246,8 +376,9 @@ function CalendarGrid({
                             ? `/p/${plan.shareCode}?at=${encodeURIComponent(plan.originalStart)}`
                             : `/p/${plan.shareCode}`
                         }
-                        // Don't also trigger "propose a time here" on the column.
+                        // Don't also trigger "propose a time here" (or a drag) on the column.
                         onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
                         onPointerMove={(e) =>
                           e.pointerType === "mouse" && setHover({ kind: "plan", plan, x: e.clientX, y: e.clientY })
                         }
@@ -274,8 +405,25 @@ function CalendarGrid({
                   />
                 )}
 
-                {/* Outline of the selected range, clipped to this day. */}
-                {selection && selection.start < dayEnd && selection.end > dayStart && (
+                {/* The range being dragged, with its times and who's free. */}
+                {drag?.day === i && (
+                  <div
+                    className="pointer-events-none absolute inset-x-0 z-[7] overflow-hidden rounded-md border-2 border-zinc-900 bg-zinc-900/20 px-1 py-0.5 text-[10px] font-medium leading-tight text-zinc-900 sm:px-1.5 sm:text-xs dark:border-white dark:bg-white/20 dark:text-white"
+                    style={{ top: drag.start * MINUTE_PX, height: (drag.end - drag.start) * MINUTE_PX }}
+                  >
+                    <div>
+                      {clock.format(atMinute(dayStart, drag.start))} – {clock.format(atMinute(dayStart, drag.end))}
+                    </div>
+                    {variant === "group" && connected.length > 0 && (
+                      <div className="font-normal">
+                        {dragFree}/{connected.length} free
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Outline of the selected range, clipped to this day (hidden mid-drag). */}
+                {selection && !drag && selection.start < dayEnd && selection.end > dayStart && (
                   <div
                     className="pointer-events-none absolute inset-x-0 z-[6] rounded-md border-2 border-zinc-900 bg-zinc-900/10 dark:border-white dark:bg-white/10"
                     style={{
@@ -431,8 +579,8 @@ function Legend({ variant, hasPlans }: { variant: Props["variant"]; hasPlans: bo
       <span><span className={`${swatch} border-2 border-dashed border-zinc-600 dark:border-zinc-400`} /> Plan you haven&apos;t answered</span>
       {variant === "group" && (
         <>
-          <span className="text-zinc-500 sm:hidden">Tap a time to see who&apos;s free.</span>
-          <span className="hidden text-zinc-500 sm:inline">Hover to see who&apos;s free · click to propose a time.</span>
+          <span className="text-zinc-500 sm:hidden">Tap a time to see who&apos;s free · hold and drag to propose one.</span>
+          <span className="hidden text-zinc-500 sm:inline">Hover to see who&apos;s free · click or drag to propose a time.</span>
         </>
       )}
     </div>

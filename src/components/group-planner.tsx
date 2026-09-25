@@ -27,9 +27,11 @@ export function GroupPlanner({ groupId, members, viewerId, weekOffset, plans }: 
   const [shareCode, setShareCode] = useState<string | null>(null);
 
   // Clicking a time: move the proposal there, keeping what's been typed.
-  // Right after creating a plan, it starts a fresh one instead.
-  function pick(start: Date) {
-    setDraft(draft && !shareCode ? withStart(draft, start) : emptyDraft(start));
+  // Right after creating a plan, it starts a fresh one instead. Dragging a
+  // range also sets its length.
+  function pick(start: Date, durationMinutes?: number) {
+    const next = draft && !shareCode ? withStart(draft, start) : emptyDraft(start);
+    setDraft(durationMinutes ? { ...next, durationMinutes } : next);
     setShareCode(null);
   }
 
@@ -75,6 +77,7 @@ export function GroupPlanner({ groupId, members, viewerId, weekOffset, plans }: 
         weekOffset={weekOffset}
         variant="group"
         onPickTime={pick}
+        onPickRange={(start, end) => pick(start, Math.round((end.getTime() - start.getTime()) / 60_000))}
         selection={draft && !shareCode ? { start: draft.start, end: draftEnd(draft) } : null}
         plans={plans}
       />
