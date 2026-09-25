@@ -19,6 +19,15 @@
   }
 }
 
+/* iPhones zoom in on any text box under 16px when you tap it. */
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

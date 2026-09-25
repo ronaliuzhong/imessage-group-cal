@@ -71,7 +71,7 @@ export default async function GroupPage({ params, searchParams }: PageProps<"/gr
     .sort((a, b) => a.next.start.getTime() - b.next.start.getTime());
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-3 py-4 sm:px-6 sm:py-8">
       <AppHeader userName={viewer.name} />
       {undo && undoSnapshot && (
         <CancelToast
@@ -92,7 +92,7 @@ export default async function GroupPage({ params, searchParams }: PageProps<"/gr
             {members.map((m) => (m.id === viewer.id ? "You" : m.name)).join(", ")}
           </p>
         </div>
-        <div className="flex w-full max-w-md flex-col items-end gap-1">
+        <div className="flex w-full max-w-md flex-col items-start gap-1 sm:items-end">
           <CopyLink path={`/join/${group.inviteCode}`} label="Invite link" />
           <span className="text-xs text-zinc-500">Text it to your group chat. Anyone with the link can join.</span>
         </div>

@@ -64,5 +64,5 @@ export default async function JoinPage({ params }: PageProps<"/join/[code]">) {
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto flex w-full max-w-md flex-col gap-4 px-6 py-24">{children}</main>;
+  return <main className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-12 sm:px-6 sm:py-24">{children}</main>;
 }

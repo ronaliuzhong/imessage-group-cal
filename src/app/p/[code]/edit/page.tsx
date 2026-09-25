@@ -42,7 +42,7 @@ export default async function EditPlanPage({ params, searchParams }: PageProps<"
     : null;
 
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-col gap-4 px-6 py-16">
+    <main className="mx-auto flex w-full max-w-lg flex-col gap-4 px-4 py-8 sm:px-6 sm:py-16">
       <Link
         href={`/p/${code}${repeating ? `?at=${encodeURIComponent(shown.originalStart.toISOString())}` : ""}`}
         className="-mb-2 self-start text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"

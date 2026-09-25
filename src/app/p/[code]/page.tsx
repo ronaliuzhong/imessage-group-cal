@@ -341,5 +341,5 @@ function CalendarStatus({ added, canAdd, code }: { added: boolean; canAdd: boole
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto flex w-full max-w-lg flex-col gap-4 px-6 py-16">{children}</main>;
+  return <main className="mx-auto flex w-full max-w-lg flex-col gap-4 px-4 py-8 sm:px-6 sm:py-16">{children}</main>;
 }

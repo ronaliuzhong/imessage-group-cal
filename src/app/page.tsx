@@ -48,7 +48,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   ].filter(Boolean);
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-3 py-4 sm:px-6 sm:py-8">
       <AppHeader userName={me.name} />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -136,7 +136,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
 function Landing() {
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-6 py-24">
+    <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-12 sm:px-6 sm:py-24">
       <h1 className="text-4xl font-semibold tracking-tight">Group Cal</h1>
       <p className="text-lg text-zinc-600 dark:text-zinc-400">
         See when your friends are free — pulled straight from everyone&apos;s Google Calendar.

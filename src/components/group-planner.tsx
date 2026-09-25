@@ -65,7 +65,7 @@ export function GroupPlanner({ groupId, members, viewerId, weekOffset, plans }: 
           >
             Propose a time
           </button>
-          <span className="ml-3 text-sm text-zinc-500">or click a time on the calendar</span>
+          <span className="ml-3 text-sm text-zinc-500">or pick a time on the calendar</span>
         </div>
       )}
 
