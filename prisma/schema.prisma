@@ -1,0 +1,234 @@
+// Database schema: each `model` becomes a table.
+// After editing this file, run `npx prisma migrate dev` to update the database.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Auth tables. Field names follow what the Auth.js Prisma adapter expects.
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  // ID of the "Group Cal" calendar the app created in this person's Google
+  // account, where plans they're going to are added. Null until first needed.
+  appCalendarId String?
+  accounts      Account[]
+  sessions      Session[]
+  memberships   GroupMember[]
+  calendarPrefs CalendarPreference[]
+  plansCreated  Plan[]
+  rsvps         Rsvp[]
+  occurrenceRsvps OccurrenceRsvp[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// One row per linked Google account. Holds the OAuth tokens that let the
+// server call the Calendar API on the user's behalf, even when they're offline.
+// access_token and refresh_token are stored ENCRYPTED (see src/lib/crypto.ts).
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+// A logged-in browser. The cookie holds `sessionToken`; deleting the row logs
+// that browser out.
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Required by the Auth.js adapter (used for email sign-in links); unused for now.
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// A user's choice to count (or not count) one of their Google calendars as
+// busy time. Only choices that differ from the default are stored; by default
+// calendars you own count and ones shared with you or subscribed to don't
+// (see listCalendars in src/lib/google.ts).
+model CalendarPreference {
+  userId     String
+  calendarId String // Google's calendar ID, e.g. "abc123@group.calendar.google.com"
+  included   Boolean
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, calendarId])
+}
+
+// ---------------------------------------------------------------------------
+// Groups
+// ---------------------------------------------------------------------------
+
+model Group {
+  id         String        @id @default(cuid())
+  name       String
+  // Secret, unguessable code in the join link (/join/<inviteCode>) that gets
+  // texted to the group chat. Anyone holding the link can join.
+  inviteCode String        @unique
+  // One of Google Calendar's event colors, by its ID ("1"–"11"; see
+  // src/lib/colors.ts). The starting color for members who haven't picked
+  // their own (GroupMember.color).
+  color      String        @default("3")
+  members    GroupMember[]
+  plans      Plan[]
+  createdAt  DateTime      @default(now())
+}
+
+// Join table: one row per (group, user) pair = "this user is in this group".
+model GroupMember {
+  groupId  String
+  userId   String
+  joinedAt DateTime @default(now())
+  // This member's own color for the group (only they see it — in the app and
+  // on their Google Calendar). Null = use the group's starting color.
+  color    String?
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId]) // fast "which groups am I in?" lookups
+}
+
+// ---------------------------------------------------------------------------
+// Plans: a proposed time, shared by texting its link (/p/<shareCode>).
+// People who tap Going get it added to their "Group Cal" Google calendar.
+// ---------------------------------------------------------------------------
+
+model Plan {
+  id          String   @id @default(cuid())
+  groupId     String
+  createdById String
+  title       String
+  location    String?
+  notes       String?
+  // First (or only) occurrence.
+  start       DateTime
+  end         DateTime
+  // The organizer's timezone (e.g. "America/New_York"), so repeats stay at
+  // the same local time across daylight-saving changes.
+  timeZone    String    @default("UTC")
+  // Repeating plans (see src/lib/recurrence.ts). repeatFreq null = happens
+  // once. Ends after repeatCount times, after the local date repeatUntil
+  // ("YYYY-MM-DD"), or never if both are null.
+  repeatFreq     String? // "DAILY" | "WEEKLY" | "MONTHLY"
+  repeatInterval Int     @default(1)
+  repeatWeekdays Int[]   @default([]) // WEEKLY: 0 = Sunday … 6 = Saturday
+  repeatUntil    String?
+  repeatCount    Int?
+  // When the last occurrence ends; null if it repeats forever. Stored so
+  // "plans still coming up" is a simple query.
+  seriesEnd   DateTime?
+  // Set when someone cancels the whole plan. The link keeps working and says so.
+  cancelledAt DateTime?
+  // "Edit this and following events" ends this plan and continues it as a
+  // new one; this points from the new plan back to the one it split from.
+  splitFromId String?
+  splitFrom   Plan?   @relation("PlanSplit", fields: [splitFromId], references: [id], onDelete: SetNull)
+  continuedAs Plan[]  @relation("PlanSplit")
+  // Secret code in the share link. Anyone with the link can view the plan.
+  shareCode   String   @unique
+  rsvps       Rsvp[]
+  occurrenceRsvps OccurrenceRsvp[]
+  exceptions  PlanException[]
+  createdAt   DateTime @default(now())
+
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy User  @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([groupId, seriesEnd]) // fast "upcoming plans for this group" lookups
+}
+
+// A one-off change to a single occurrence of a repeating plan ("edit this
+// event" / "cancel this event"), identified by when it was originally meant
+// to start. Null fields keep the plan's own value.
+model PlanException {
+  planId        String
+  originalStart DateTime
+  cancelled     Boolean   @default(false)
+  title         String?
+  location      String? // "" = location removed for this date
+  notes         String? // "" = notes removed for this date
+  start         DateTime?
+  end           DateTime?
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@id([planId, originalStart])
+}
+
+enum RsvpResponse {
+  GOING
+  NOT_GOING
+}
+
+// One person's answer to a whole plan (every occurrence, if it repeats).
+model Rsvp {
+  planId    String
+  userId    String
+  response  RsvpResponse
+  // The event we added to this person's "Group Cal" Google calendar (a
+  // repeating event for repeating plans). Null = not on it.
+  googleEventId String?
+  updatedAt DateTime     @updatedAt
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([planId, userId])
+}
+
+// One person's answer to a single occurrence of a repeating plan. Overrides
+// their answer to the whole plan (Rsvp) for that date.
+model OccurrenceRsvp {
+  planId        String
+  userId        String
+  originalStart DateTime
+  response      RsvpResponse
+  // A standalone Google event for just this date (when they're going to this
+  // one but not to the whole series).
+  googleEventId String?
+  updatedAt     DateTime     @updatedAt
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([planId, userId, originalStart])
+}
