@@ -99,18 +99,35 @@ whose calendar isn't connected.
 
 ## Testing plan
 
-The main round of testing happens on the native versions, but the web app
-gets a light test first because it's the engine they all run on.
+Decided 2026-09-26: **skip a separate web test** and go straight to building
+and testing the iMessage extension. It's the real product, and it runs on
+the same engine, so the engine gets tested along the way.
 
-1. **Light web test:** 2–3 friends use the web app for real plans for about
-   a week, to find backend bugs while they're cheap to fix in one place.
-2. **Google verification**, started in the background (below).
-3. **Phase 2 testers get the iMessage extension through TestFlight**
-   (Apple's beta testing; up to 10,000 testers). Needs an Apple Developer
-   account ($99/year) and Xcode.
+1. **Google verification**, started in the background (below). Not needed
+   to build or to test with friends; needed before a public App Store launch.
+2. **Build Phase 2**, testing in three steps: the iPhone simulator on the
+   Mac (its Messages app has pretend chat participants), then your own
+   iPhone, then friends through **TestFlight** (Apple's beta testing; up to
+   10,000 testers). Needs Xcode (free) and, for your own phone with all
+   features and for TestFlight, an Apple Developer account ($99/year).
 
 Google's Testing-mode limits apply to the native apps too: they sign in with
-the same Google project.
+the same Google project. Until verification, testers go on the test user
+list, or the app is published unverified (warning screen, 100-user cap).
+
+## Phase 2 plan
+
+1. **Setup:** install Xcode; later, the Apple Developer account.
+2. **Backend for apps** (this repo): app-friendly endpoints (group
+   availability, create plan, RSVP, ...) reusing the existing logic, plus a
+   sign-in that gives the app a key the server recognizes. Try out sign-in
+   first: iMessage extensions are limited in what they can open, so the
+   likely approach is signing in inside the minimal home-screen app and
+   sharing the login with the extension through the App Group.
+3. **Extension:** compact view (glance, "Waiting for...", Propose), expanded
+   view (week calendar, plan details), interactive bubble that updates in
+   place on RSVP, thread = group via the bubble, and a web fallback link.
+4. **Testing:** simulator → own iPhone → TestFlight.
 
 ## Google verification
 
