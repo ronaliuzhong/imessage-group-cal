@@ -4,19 +4,35 @@ Group Cal lets a group of friends see when they're all free, using everyone's
 Google Calendar (free/busy only, never event details), and propose plans in
 that free time.
 
-## Long-term vision: one app, three faces
+## The group chat is the social graph
 
-The end goal is **one native iOS app**, not three separate builds. It has
-three "faces" that all share the same backend:
+iMessage group chats already are the social graph Group Cal needs.
+**Whoever is in a given thread is who we show availability for.** There is
+no separate "add friends" flow and no friend list.
 
-1. **The main app.** Open it directly, switch between friends and groups,
-   view anyone's synced availability, propose times, and see history.
-2. **An iMessage App Extension** (like GamePigeon). The same data, shown as
-   an interactive bubble inside a group chat.
-3. **A widget** (WidgetKit). Availability at a glance on the home or lock
-   screen, e.g. "Sam is free until 3pm" or today's group overlap.
+- **Keep:** the backend engine (calendar sync, overlap calculation, event
+  creation). It's the core either way.
+- **Out of scope (not deferred):** a standalone app for browsing or switching
+  between friends, with its own social features or personal profiles.
+- **The web app** only needs to onboard people (connect Google Calendar) and
+  support proposing plans and glancing at availability for the members of a
+  specific group or plan.
+- **"Who's free right now"** at-a-glance view: always for one group's
+  members, never a global friend list.
 
-All three are separate targets in **one Xcode project with one App Store
+## Long-term vision: one app, several faces
+
+The end goal is **one native iOS app**, not separate builds. Every face uses
+the same backend and is scoped to a group:
+
+1. **An iMessage App Extension** (like GamePigeon). The main experience:
+   availability and plans shown as an interactive bubble inside a group chat.
+2. **A widget** (WidgetKit). A group's availability at a glance on the home
+   or lock screen, e.g. "Sam is free until 3pm" or today's overlap.
+3. **The app you open from the home screen.** Kept minimal: setup (connect
+   Google Calendar) and whatever the other faces need. No friend browsing.
+
+All of them are separate targets in **one Xcode project with one App Store
 listing**. They share data through an **App Group**, so they all read the
 same synced calendar data instead of each fetching its own.
 
@@ -24,9 +40,56 @@ same synced calendar data instead of each fetching its own.
 
 | Phase | What | Status |
 |---|---|---|
-| 1 | **Web app**: the real engine; works for anyone with a browser | Live on Vercel |
+| 1 | **Web app**: the real engine, plus onboarding and group planning in a browser | Live on Vercel |
 | 2 | **iMessage App Extension**: native Swift, same backend | Not started |
-| 3 | **Native app + widget**: same backend again | Not started |
+| 3 | **Widget + minimal home-screen app**: same backend again | Not started |
+
+## Known limitations (for onboarding design later)
+
+- Someone's availability only shows up if they've connected Google Calendar
+  at least once.
+- Once Phase 2 exists, only people with the app installed see the
+  interactive bubble. Android users and anyone who hasn't installed it see
+  a fallback (text and a link) instead.
+- So the feature's value in each group depends on how many members finish
+  setup. Onboarding should be designed with this in mind.
+
+## Links now, bubbles in Phase 2
+
+In Phase 1, people copy group invite links and plan links from the website
+and paste them into the group chat, because there's no extension yet. In
+Phase 2 the extension replaces this:
+
+- Proposing a plan drops an interactive bubble into the chat; people answer
+  Going / Can't make it right in the bubble.
+- The bubble also works as the invite: using it puts you in that chat's
+  group, so there's no separate invite link.
+- Each bubble carries a web link behind it. Anyone without the app
+  (including Android) gets that link, which opens today's plan and join
+  pages. So those pages stay, as the fallback.
+
+## iMessage extension: "Waiting for..." section
+
+The overlap/glance view in the iMessage extension includes a **"Waiting
+for..."** list of group members whose availability is missing:
+
+- (a) in the thread but haven't installed the app, or
+- (b) have the app but haven't connected Google Calendar yet.
+
+Incomplete data is shown openly, so whoever is looking can see who's
+missing and nudge them, instead of the overlap being silently wrong.
+
+**To check when building Phase 2:** Apple doesn't tell iMessage extensions
+who is in a chat. It gives anonymous IDs, not names or phone numbers.
+- (b) works fully: once someone opens the extension, their ID can be linked
+  to their Group Cal account.
+- (a) may only be possible as a count ("2 people haven't set up Group Cal")
+  in the extension's own screens. Message bubbles can show a participant's
+  name using their ID, which may let the bubble name them. Work this out
+  early in Phase 2.
+
+The web app already does a version of (b): the group page lists members
+whose calendar isn't connected.
 
 ### Phase 1 follow-ups
 
