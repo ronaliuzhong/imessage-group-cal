@@ -1,10 +1,12 @@
 import Foundation
 import Security
 
-/// Keeps the app's sign-in token in the iPhone's Keychain, the system's
-/// encrypted password storage. (Later, the iMessage extension and widget will
-/// read it from a shared Keychain group.)
+/// Keeps the sign-in token in the iPhone's Keychain, the system's encrypted
+/// password storage. It's stored under the App Group, so the app signs in
+/// once and the iMessage extension (and later the widget) can use it too.
 enum TokenStore {
+    /// Must match the App Group in project.yml.
+    static let appGroup = "group.com.ronaliuzhong.groupcal"
     private static let service = "com.ronaliuzhong.groupcal"
     private static let account = "appToken"
 
@@ -13,6 +15,7 @@ enum TokenStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecAttrAccessGroup as String: appGroup,
         ]
     }
 

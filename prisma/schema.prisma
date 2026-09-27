@@ -134,6 +134,10 @@ model CalendarPreference {
 model Group {
   id         String        @id @default(cuid())
   name       String
+  // True when nobody typed a name (one-on-one chats started from iMessage):
+  // the name is made from members' first names ("Rona & Sam") and updated as
+  // people join. See autoGroupName in src/lib/groups.ts.
+  autoNamed  Boolean       @default(false)
   // Secret, unguessable code in the join link (/join/<inviteCode>) that gets
   // texted to the group chat. Anyone holding the link can join.
   inviteCode String        @unique

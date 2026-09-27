@@ -22,42 +22,80 @@ settings:
     SWIFT_VERSION: "6.0"
     # Set once there's an Apple Developer account (needed for real phones).
     DEVELOPMENT_TEAM: ""
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1" # iPhone only
+  configs:
+    # The server the app and extension talk to (read via Config.swift).
+    # Debug (running from Xcode): your Mac's dev server.
+    Debug:
+      API_BASE_URL: http://localhost:3000
+    # Release (TestFlight, App Store): the live site.
+    Release:
+      API_BASE_URL: https://imessage-group-cal.vercel.app
+
+# Info.plist entries both targets need.
+infoShared: &infoShared
+  # "Group Cal" is a placeholder until the app is named.
+  CFBundleDisplayName: Group Cal
+  CFBundleShortVersionString: $(MARKETING_VERSION)
+  CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+  API_BASE_URL: $(API_BASE_URL)
+  # Lets the simulator reach the dev server on http://localhost.
+  NSAppTransportSecurity:
+    NSAllowsLocalNetworking: true
+
+# The App Group lets the app and the extension share the saved sign-in.
+# Must match TokenStore.appGroup in Shared/TokenStore.swift.
+entitlementsShared: &entitlementsShared
+  com.apple.security.application-groups:
+    - group.com.ronaliuzhong.groupcal
 
 targets:
-  # The app you open from the home screen. For now: signing in.
+  # The app you open from the home screen (kept minimal; see ROADMAP.md).
+  # Apple requires an app to carry the iMessage extension; people can also
+  # sign in right from the extension.
   GroupCal:
     type: application
     platform: iOS
-    sources: [GroupCal]
+    sources: [GroupCal, Shared]
+    dependencies:
+      - target: GroupCalMessages
     info:
       path: GroupCal/Info.plist
       properties:
-        # "Group Cal" is a placeholder until the app is named.
-        CFBundleDisplayName: Group Cal
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        # The server the app talks to (see API_BASE_URL below).
-        API_BASE_URL: $(API_BASE_URL)
+        <<: *infoShared
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        # Lets the simulator reach the dev server on http://localhost.
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
+    entitlements:
+      path: GroupCal/GroupCal.entitlements
+      properties: *entitlementsShared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ronaliuzhong.groupcal
-        MARKETING_VERSION: "0.1"
-        CURRENT_PROJECT_VERSION: "1"
-        TARGETED_DEVICE_FAMILY: "1" # iPhone only
-      configs:
-        # Debug (running from Xcode): your Mac's dev server.
-        Debug:
-          API_BASE_URL: http://localhost:3000
-        # Release (TestFlight, App Store): the live site.
-        Release:
-          API_BASE_URL: https://imessage-group-cal.vercel.app
     scheme:
       testTargets: [GroupCalTests]
+
+  # The iMessage extension: Group Cal inside a group chat. The main way
+  # people use Group Cal, including signing in.
+  GroupCalMessages:
+    type: app-extension.messages
+    platform: iOS
+    sources: [GroupCalMessages, Shared]
+    info:
+      path: GroupCalMessages/Info.plist
+      properties:
+        <<: *infoShared
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.message-payload-provider
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).MessagesViewController
+    entitlements:
+      path: GroupCalMessages/GroupCalMessages.entitlements
+      properties: *entitlementsShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ronaliuzhong.groupcal.messages
+    scheme: {}
 
   GroupCalTests:
     type: bundle.unit-test

@@ -1,6 +1,7 @@
 # Generated from project.yml by XcodeGen.
 GroupCal.xcodeproj/
-GroupCal/Info.plist
+*/Info.plist
+*/*.entitlements
 
 # Xcode's per-person and build files.
 xcuserdata/

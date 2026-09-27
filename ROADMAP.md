@@ -29,8 +29,11 @@ the same backend and is scoped to a group:
    availability and plans shown as an interactive bubble inside a group chat.
 2. **A widget** (WidgetKit). A group's availability at a glance on the home
    or lock screen, e.g. "Sam is free until 3pm" or today's overlap.
-3. **The app you open from the home screen.** Kept minimal: setup (connect
-   Google Calendar) and whatever the other faces need. No friend browsing.
+3. **The app you open from the home screen.** Kept minimal: setup and
+   whatever the other faces need. No friend browsing. Apple requires an app
+   to carry the extension, but people don't have to open it: **signing in
+   (connecting Google Calendar) happens right in the iMessage extension**,
+   and the app and extension share the saved sign-in.
 
 All of them are separate targets in **one Xcode project with one App Store
 listing**. They share data through an **App Group**, so they all read the

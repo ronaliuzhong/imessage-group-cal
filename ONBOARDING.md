@@ -165,6 +165,12 @@ open GroupCal.xcodeproj
   New Swift files in `ios/GroupCal/` are picked up automatically.
 - **Running from Xcode talks to your dev server** (`http://localhost:3000`),
   so keep `npm run dev` running. Release builds use the live site.
+- **Targets:** `GroupCal` (the home-screen app, in `ios/GroupCal/`),
+  `GroupCalMessages` (the iMessage extension, in `ios/GroupCalMessages/`),
+  and code both use in `ios/Shared/`. They share the saved sign-in through
+  the App Group `group.com.ronaliuzhong.groupcal`.
+- **Trying the extension:** pick the `GroupCalMessages` scheme at the top of
+  Xcode, press Run, and choose **Messages** when asked which app to run.
 - **Sign-in:** the app opens `/app-auth` in a secure browser window, you
   sign in with Google, and the server hands the app a token. It's explained
   at the top of `src/lib/app-auth.ts`.

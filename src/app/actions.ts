@@ -13,6 +13,7 @@ import { removeUserFromPlan, syncPlanForEveryone, syncPlanForUser } from "@/lib/
 import { normalizeColor } from "@/lib/colors";
 import { prisma } from "@/lib/db";
 import { deleteEvent } from "@/lib/google";
+import { createGroupFor, joinGroupFor } from "@/lib/groups";
 import { parsePlanInput, repeatChanged, type PlanFields, type PlanInput } from "@/lib/plan-input";
 import { carryOverDates, planAllEdit } from "@/lib/edit-all";
 import { findOccurrence, ruleOf, shiftWeekdays } from "@/lib/plan-occurrences";
@@ -33,35 +34,19 @@ export async function signOutAction() {
 
 export async function createGroup(formData: FormData) {
   const user = await requireUser();
-  const name = String(formData.get("name") ?? "").trim().slice(0, 60);
-  if (!name) return;
-  // normalizeColor() falls back to the default for anything that isn't a color.
-  const color = normalizeColor(String(formData.get("color") ?? ""));
-
-  const group = await prisma.group.create({
-    data: {
-      name,
-      color,
-      // 16 random bytes ≈ 3.4×10^38 possibilities: impossible to guess.
-      inviteCode: randomBytes(16).toString("base64url"),
-      members: { create: { userId: user.id } },
-    },
-  });
+  const group = await createGroupFor(
+    user.id,
+    String(formData.get("name") ?? ""),
+    String(formData.get("color") ?? ""),
+  );
+  if (!group) return;
   redirect(`/groups/${group.id}`);
 }
 
 export async function joinGroup(inviteCode: string) {
   const user = await requireUser();
-  const group = await prisma.group.findUnique({ where: { inviteCode } });
+  const group = await joinGroupFor(user.id, inviteCode);
   if (!group) notFound();
-
-  // upsert = "insert, or do nothing if already a member" — so tapping the
-  // link twice is harmless.
-  await prisma.groupMember.upsert({
-    where: { groupId_userId: { groupId: group.id, userId: user.id } },
-    create: { groupId: group.id, userId: user.id },
-    update: {},
-  });
   redirect(`/groups/${group.id}`);
 }
 
