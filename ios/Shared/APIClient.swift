@@ -33,6 +33,58 @@ private struct GroupResponse: Decodable {
     let group: GroupSummary
 }
 
+/// One of your groups, from GET /api/app/groups.
+struct GroupListItem: Decodable, Equatable, Sendable, Identifiable {
+    let id: String
+    let name: String
+    let autoNamed: Bool
+    let inviteCode: String
+    let joinUrl: URL
+    let memberCount: Int
+}
+
+private struct GroupListResponse: Decodable {
+    let groups: [GroupListItem]
+}
+
+/// A plan, from the viewer's side (GET /api/app/plans/:code and friends).
+struct PlanSummary: Decodable, Equatable, Sendable {
+    struct Person: Decodable, Equatable, Sendable, Identifiable {
+        let id: String
+        let name: String
+        let isYou: Bool
+    }
+
+    enum Response: String, Decodable, Sendable {
+        case going = "GOING"
+        case notGoing = "NOT_GOING"
+    }
+
+    let id: String
+    let shareCode: String
+    let title: String
+    let start: Date
+    let end: Date
+    let location: String?
+    let notes: String?
+    let groupId: String
+    let groupName: String
+    /// Whether you're in the plan's group.
+    let inGroup: Bool
+    /// Repeating plans are answered on the website.
+    let repeats: Bool
+    let cancelled: Bool
+    let going: [Person]
+    let notGoing: [Person]
+    let myResponse: Response?
+    /// Goes behind the plan bubble (the website's plan page).
+    let url: URL
+}
+
+private struct PlanResponse: Decodable {
+    let plan: PlanSummary
+}
+
 /// GET /api/app/groups/:id/availability
 struct Availability: Decodable, Equatable, Sendable {
     struct Member: Decodable, Equatable, Sendable, Identifiable {
@@ -50,9 +102,36 @@ struct Availability: Decodable, Equatable, Sendable {
         let busyMemberIds: [String]
     }
 
+    /// A plan (or one date of a repeating plan) in the group.
+    struct Plan: Decodable, Equatable, Sendable, Identifiable {
+        struct Color: Decodable, Equatable, Sendable {
+            /// "#8E24AA": your color for the group.
+            let hex: String
+            /// A text color that stays readable on top of `hex`.
+            let text: String
+        }
+
+        /// Unique per date: "<plan id>:<date>".
+        let id: String
+        let shareCode: String
+        let title: String
+        let start: Date
+        let end: Date
+        let location: String?
+        /// e.g. "Weekly on Thursday"; nil if it doesn't repeat.
+        let repeatLabel: String?
+        let color: Color
+        let goingCount: Int
+        let myResponse: PlanSummary.Response?
+    }
+
     let group: GroupSummary
     let members: [Member]
     let segments: [Segment]
+    /// Plans in the day or week on screen.
+    let plans: [Plan]
+    /// The next few plans (up to a month ahead).
+    let upcoming: [Plan]
 }
 
 enum APIError: LocalizedError {
@@ -103,6 +182,12 @@ struct APIClient {
         return response.group
     }
 
+    /// Your groups, most recently joined first.
+    func myGroups(token: String) async throws -> [GroupListItem] {
+        let response: GroupListResponse = try await send(authorized(URLRequest(url: baseURL.appending(path: "api/app/groups")), token: token))
+        return response.groups
+    }
+
     /// Tapping an invite bubble. Joining twice is fine.
     func joinGroup(inviteCode: String, token: String) async throws -> GroupSummary {
         let response: GroupResponse = try await send(postJSON("api/app/groups/join", ["inviteCode": inviteCode], token: token))
@@ -118,6 +203,44 @@ struct APIClient {
             URLQueryItem(name: "end", value: end.formatted(iso)),
         ])
         return try await send(authorized(URLRequest(url: url), token: token))
+    }
+
+    /// Proposes a (one-time) plan in a group. You're marked as going and it's
+    /// added to your Google Calendar.
+    func proposePlan(
+        groupId: String, title: String, start: Date, durationMinutes: Int, location: String, token: String
+    ) async throws -> PlanSummary {
+        struct Body: Encodable {
+            let title: String
+            let start: String
+            let durationMinutes: Int
+            let location: String
+            let timeZone: String
+        }
+        let body = Body(
+            title: title,
+            start: start.formatted(Date.ISO8601FormatStyle()),
+            durationMinutes: durationMinutes,
+            location: location,
+            timeZone: TimeZone.current.identifier
+        )
+        let response: PlanResponse = try await send(postJSON("api/app/groups/\(groupId)/plans", body, token: token))
+        return response.plan
+    }
+
+    func plan(shareCode: String, token: String) async throws -> PlanSummary {
+        let response: PlanResponse = try await send(
+            authorized(URLRequest(url: baseURL.appending(path: "api/app/plans/\(shareCode)")), token: token)
+        )
+        return response.plan
+    }
+
+    /// Going / Can't make it. Updates your Google Calendar to match.
+    func answer(shareCode: String, _ answer: PlanSummary.Response, token: String) async throws -> PlanSummary {
+        let response: PlanResponse = try await send(
+            postJSON("api/app/plans/\(shareCode)/rsvp", ["response": answer.rawValue], token: token)
+        )
+        return response.plan
     }
 
     /// Signs this device out on the server. Failures are ignored: the app

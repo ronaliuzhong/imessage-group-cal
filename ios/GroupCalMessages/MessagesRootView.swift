@@ -32,7 +32,12 @@ struct MessagesRootView: View {
         case .working(let label):
             ProgressView(label).frame(maxWidth: .infinity, maxHeight: .infinity)
         case .start:
-            StartPanel(isOneOnOne: model.isOneOnOne) { model.beginStart() }
+            StartPanel(
+                isOneOnOne: model.isOneOnOne,
+                existingGroups: model.existingGroups,
+                onStart: { model.beginStart() },
+                onLink: { group in Task { await model.link(to: group) } }
+            )
         case .naming:
             NameGroupForm(
                 onStart: { name in Task { await model.startGroup(named: name) } },
@@ -50,7 +55,26 @@ struct MessagesRootView: View {
                 onMove: { step in Task { await model.move(by: step) } },
                 onToday: { Task { await model.goToToday() } },
                 onInvite: { Task { await model.sendInvite(for: availability.group) } },
-                onRefresh: { Task { await model.load() } }
+                onRefresh: { Task { await model.load() } },
+                onPropose: { start, minutes in model.beginProposal(at: start, minutes: minutes) },
+                onOpenPlan: { code in Task { await model.openPlan(shareCode: code) } }
+            )
+        case .proposing(let start, let minutes):
+            ProposeForm(
+                initialStart: start,
+                initialMinutes: minutes,
+                availability: model.lastAvailability,
+                onSend: { title, start, minutes, location in
+                    Task { await model.sendProposal(title: title, start: start, durationMinutes: minutes, location: location) }
+                },
+                onCancel: { model.cancelProposal() }
+            )
+        case .plan(let plan):
+            PlanView(
+                plan: plan,
+                isAnswering: model.isAnswering,
+                onAnswer: { response in Task { await model.answer(response) } },
+                onBack: { Task { await model.backToCalendar() } }
             )
         case .problem(let message):
             Problem(title: "Something went wrong", message: message) {
@@ -95,27 +119,66 @@ private struct SignInPanel: View {
 
 private struct StartPanel: View {
     let isOneOnOne: Bool
+    let existingGroups: [GroupListItem]
     let onStart: () -> Void
+    let onLink: (GroupListItem) -> Void
+    @State private var showingGroups = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text(isOneOnOne ? "See when you're both free" : "See when this chat is free")
-                .font(.headline)
-            Text(isOneOnOne
-                ? "Start Group Cal here and send an invite. Once they tap it, you'll both see each other's free/busy times."
-                : "Start Group Cal here and send an invite. Everyone who joins shares their free/busy times with the chat.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Start Group Cal in this chat", action: onStart)
-                .buttonStyle(.borderedProminent)
-            Text("Already started? Tap the Group Cal invite in this chat to join.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        ScrollView {
+            VStack(spacing: 12) {
+                Text(isOneOnOne ? "See when you're both free" : "See when this chat is free")
+                    .font(.headline)
+                Text(isOneOnOne
+                    ? "Start Group Cal here and send an invite. Once they tap it, you'll both see each other's free/busy times."
+                    : "Start Group Cal here and send an invite. Everyone who joins shares their free/busy times with the chat.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Start Group Cal in this chat", action: onStart)
+                    .buttonStyle(.borderedProminent)
+
+                Text("Already started? Tap the Group Cal invite in this chat to join.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                // Group Cal can't tell a brand-new chat from one it doesn't
+                // recognize anymore (e.g. after reinstalling), so the way to
+                // link an existing group stays tucked behind one small link.
+                if !existingGroups.isEmpty && !showingGroups {
+                    Button("Link to an existing group") { showingGroups = true }
+                        .font(.footnote)
+                }
+                if showingGroups {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Which group is this chat?")
+                            .font(.subheadline.weight(.semibold))
+                        ForEach(existingGroups) { group in
+                            Button { onLink(group) } label: {
+                                HStack {
+                                    Text(group.name)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Text(group.memberCount == 1 ? "1 member" : "\(group.memberCount) members")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 12)
+                                .background(RoundedRectangle(cornerRadius: 10).fill(Color(uiColor: .secondarySystemBackground)))
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

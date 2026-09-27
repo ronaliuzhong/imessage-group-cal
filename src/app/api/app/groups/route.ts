@@ -1,5 +1,22 @@
 import { groupSummary, jsonBody, jsonError, withAppUser } from "@/lib/app-api";
+import { prisma } from "@/lib/db";
 import { createAutoNamedGroupFor, createGroupFor } from "@/lib/groups";
+
+// GET: your groups, most recently joined first, so a chat Group Cal doesn't
+// recognize can be linked to one. → { "groups": [{ ...summary, memberCount }] }
+export async function GET(request: Request) {
+  return withAppUser(request, async (user) => {
+    const memberships = await prisma.groupMember.findMany({
+      where: { userId: user.id },
+      orderBy: { joinedAt: "desc" },
+      include: { group: { include: { _count: { select: { members: true } } } } },
+    });
+    const groups = await Promise.all(
+      memberships.map(async ({ group }) => ({ ...(await groupSummary(group)), memberCount: group._count.members })),
+    );
+    return Response.json({ groups });
+  });
+}
 
 // POST: "Start Group Cal in this chat". Body: { "name": "Roommates" }, or
 // { "autoName": true } for one-on-one chats (named from members' first names).

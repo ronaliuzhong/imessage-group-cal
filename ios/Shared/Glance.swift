@@ -33,6 +33,16 @@ extension Availability {
         return .free(until: last == segments.count - 1 ? nil : until)
     }
 
+    /// Who's busy at any point between `start` and `end` (for "Sam is busy
+    /// then" when proposing a time). Nil if that time isn't loaded.
+    func busyMembers(from start: Date, to end: Date) -> [Member]? {
+        guard let first = segments.first, let last = segments.last,
+              first.start <= start, last.end >= end
+        else { return nil }
+        let busyIds = Set(segments.filter { $0.start < end && $0.end > start }.flatMap(\.busyMemberIds))
+        return connectedMembers.filter { busyIds.contains($0.id) }
+    }
+
     /// How many connected members are free during `segment`.
     func freeCount(in segment: Segment) -> Int {
         connectedMembers.count - segment.busyMemberIds.count

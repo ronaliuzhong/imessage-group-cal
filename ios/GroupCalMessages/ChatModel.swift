@@ -8,7 +8,8 @@ import SwiftUI
 /// A chat becomes a group when someone taps "Start Group Cal in this chat":
 /// that creates the group and puts an invite bubble in the chat. Everyone else
 /// joins by tapping the bubble. After that, opening Group Cal in the chat
-/// shows its group at a glance.
+/// shows its group at a glance, where anyone can propose a plan: that sends a
+/// plan bubble people answer (Going / Can't make it) right in the chat.
 @MainActor
 @Observable
 final class ChatModel {
@@ -20,6 +21,10 @@ final class ChatModel {
         case naming
         case working(String)
         case glance(Availability)
+        /// Filling in a plan: its start and length (minutes).
+        case proposing(Date, Int)
+        /// A plan, opened from its bubble.
+        case plan(PlanSummary)
         case problem(String)
     }
 
@@ -34,6 +39,13 @@ final class ChatModel {
     private(set) var screen: Screen = .loading
     /// Everyone in the chat, including you.
     private(set) var participantCount = 1
+    /// Your groups, offered on the start screen so a chat Group Cal doesn't
+    /// recognize can be linked instead of starting a duplicate.
+    private(set) var existingGroups: [GroupListItem] = []
+    /// The calendar last shown, for "Sam is busy then" while proposing.
+    private(set) var lastAvailability: Availability?
+    /// Answering Going / Can't make it on the plan screen.
+    private(set) var isAnswering = false
 
     /// Opens on the week; the Day | Week switch is under the calendar.
     private(set) var span: Span = .week
@@ -61,11 +73,18 @@ final class ChatModel {
     /// Hooks to Messages, set by MessagesViewController.
     var requestStyle: @MainActor (MSMessagesAppPresentationStyle) -> Void = { _ in }
     var insertMessage: @MainActor (MSMessage) async throws -> Void = { _ in }
+    /// Sends right away (no tap on send), for updating a plan bubble.
+    var sendMessage: @MainActor (MSMessage) async throws -> Void = { _ in }
 
     private let api = APIClient()
     private var conversationKey: String?
     /// Set when Group Cal was opened by tapping an invite bubble.
     private var pendingInviteCode: String?
+    /// Set when Group Cal was opened by tapping a plan bubble.
+    private var pendingPlanCode: String?
+    /// The tapped plan bubble's session: sending a message in the same
+    /// session replaces the bubble instead of adding a new one.
+    private var planSession: MSSession?
 
     // MARK: Opening
 
@@ -73,16 +92,34 @@ final class ChatModel {
     func activate(in conversation: MSConversation) async {
         participantCount = conversation.remoteParticipantIdentifiers.count + 1
         conversationKey = ConversationStore.key(for: conversation)
-        pendingInviteCode = conversation.selectedMessage?.url.flatMap(Self.inviteCode(in:))
+        pendingInviteCode = nil
+        pendingPlanCode = nil
+        if let message = conversation.selectedMessage { noteBubble(message) }
         await auth.restore()
         await load()
     }
 
     /// A bubble was tapped while Group Cal was already open.
     func selected(_ message: MSMessage) async {
-        guard let code = message.url.flatMap(Self.inviteCode(in:)) else { return }
-        pendingInviteCode = code
+        guard noteBubble(message) else { return }
         await load()
+    }
+
+    /// Remembers what a tapped bubble is (an invite or a plan). Returns false
+    /// if it's neither.
+    @discardableResult
+    private func noteBubble(_ message: MSMessage) -> Bool {
+        guard let url = message.url else { return false }
+        if let code = Self.inviteCode(in: url) {
+            pendingInviteCode = code
+            return true
+        }
+        if let code = Self.planCode(in: url) {
+            pendingPlanCode = code
+            planSession = message.session
+            return true
+        }
+        return false
     }
 
     /// "Try again" after the server couldn't be reached.
@@ -101,7 +138,14 @@ final class ChatModel {
     func load() async {
         guard case .signedIn = auth.state, let token = TokenStore.read() else { return }
         do {
-            if let code = pendingInviteCode {
+            if let code = pendingPlanCode {
+                pendingPlanCode = nil
+                screen = .working("Opening plan…")
+                let plan = try await api.plan(shareCode: code, token: token)
+                // The plan's group is this chat's group, if they're in it.
+                if plan.inGroup { remember(plan.groupId) }
+                screen = .plan(plan)
+            } else if let code = pendingInviteCode {
                 screen = .working("Joining…")
                 let group = try await api.joinGroup(inviteCode: code, token: token)
                 pendingInviteCode = nil
@@ -111,15 +155,31 @@ final class ChatModel {
                 if case .glance = screen {} else { screen = .loading }
                 try await showGlance(groupId: groupId, token: token)
             } else {
+                // Not recognized (a new chat, or its anonymous IDs changed).
+                // Offer their groups too; if that fails, they can still start.
+                existingGroups = (try? await api.myGroups(token: token)) ?? []
                 screen = .start
             }
         } catch APIError.notSignedIn {
             await auth.signOut()
         } catch APIError.notFound(let message) {
-            // A stale invite, or a group they've left: start fresh.
+            // A stale invite or plan, or a group they've left: start fresh.
             pendingInviteCode = nil
+            pendingPlanCode = nil
             if let key = conversationKey { ConversationStore.forget(key: key) }
             screen = .problem(message)
+        } catch {
+            screen = .problem(error.localizedDescription)
+        }
+    }
+
+    /// "Already have a group for this chat?": link it instead of starting one.
+    func link(to group: GroupListItem) async {
+        guard let token = TokenStore.read() else { return }
+        remember(group.id)
+        screen = .loading
+        do {
+            try await showGlance(groupId: group.id, token: token)
         } catch {
             screen = .problem(error.localizedDescription)
         }
@@ -172,7 +232,96 @@ final class ChatModel {
         }
     }
 
+    // MARK: Proposing a plan
+
+    /// From tapping the calendar (a time), holding and dragging (a time and
+    /// length), or the "Propose a time" button (the next hour, 1 hour long).
+    func beginProposal(at start: Date? = nil, minutes: Int? = nil) {
+        let time = start ?? Calendar.current.nextDate(
+            after: .now, matching: DateComponents(minute: 0), matchingPolicy: .nextTime
+        )!
+        screen = .proposing(time, minutes ?? 60)
+        // The keyboard only shows in the expanded (full-height) view.
+        requestStyle(.expanded)
+    }
+
+    func cancelProposal() {
+        requestStyle(.compact)
+        if let availability = lastAvailability { screen = .glance(availability) } else { Task { await load() } }
+    }
+
+    /// Creates the plan (you're going; it's added to your Google Calendar)
+    /// and puts its bubble in the message box for you to send.
+    func sendProposal(title: String, start: Date, durationMinutes: Int, location: String) async {
+        guard let token = TokenStore.read(), let groupId = lastAvailability?.group.id else { return }
+        screen = .working("Creating plan…")
+        do {
+            let plan = try await api.proposePlan(
+                groupId: groupId, title: title, start: start, durationMinutes: durationMinutes,
+                location: location, token: token
+            )
+            try await insertMessage(planMessage(for: plan, session: MSSession()))
+            requestStyle(.compact)
+            try await showGlance(groupId: groupId, token: token)
+        } catch {
+            screen = .problem(error.localizedDescription)
+        }
+    }
+
+    // MARK: Answering a plan
+
+    /// Going / Can't make it. Updates their Google Calendar (on the server)
+    /// and the bubble in the chat, so everyone sees who's going.
+    func answer(_ response: PlanSummary.Response) async {
+        guard case .plan(let current) = screen, let token = TokenStore.read() else { return }
+        isAnswering = true
+        defer { isAnswering = false }
+        do {
+            let updated = try await api.answer(shareCode: current.shareCode, response, token: token)
+            screen = .plan(updated)
+            // Opened from its bubble: update the bubble, so everyone sees
+            // who's going. Sending in the bubble's session replaces it; if
+            // Messages won't send right away, leave it in the message box.
+            if let planSession {
+                let message = planMessage(for: updated, session: planSession)
+                do { try await sendMessage(message) } catch { try await insertMessage(message) }
+            }
+        } catch {
+            screen = .problem(error.localizedDescription)
+        }
+    }
+
+    /// Tapping a plan on the calendar or in "Upcoming plans". There's no
+    /// bubble to update, so answering there only changes the plan itself.
+    func openPlan(shareCode: String) async {
+        pendingPlanCode = shareCode
+        planSession = nil
+        requestStyle(.expanded)
+        await load()
+    }
+
+    /// From a plan back to the chat's calendar.
+    func backToCalendar() async {
+        requestStyle(.compact)
+        await load()
+    }
+
     // MARK: Helpers
+
+    /// A plan's bubble: its name, when, and how many are going.
+    private func planMessage(for plan: PlanSummary, session: MSSession) -> MSMessage {
+        let layout = MSMessageTemplateLayout()
+        layout.caption = plan.title
+        layout.subcaption = PlanTime.describe(plan.start, plan.end)
+        layout.trailingSubcaption = plan.going.count == 1 ? "1 going" : "\(plan.going.count) going"
+        let message = MSMessage(session: session)
+        message.layout = layout
+        // The extension recognizes this link; anyone without the app (or on
+        // Android) gets the website's plan page instead.
+        message.url = plan.url
+        message.summaryText = "\(plan.title) · \(PlanTime.describe(plan.start, plan.end))"
+        return message
+    }
 
     private func insertInvite(for group: GroupSummary) async throws {
         let layout = MSMessageTemplateLayout()
@@ -233,6 +382,7 @@ final class ChatModel {
         let availability = try await api.availability(groupId: groupId, from: requested.start, to: requested.end, token: token)
         // Tapping ‹ › quickly: only show the answer for the latest request.
         guard requested == range else { return }
+        lastAvailability = availability
         screen = .glance(availability)
     }
 
@@ -244,5 +394,11 @@ final class ChatModel {
     static func inviteCode(in url: URL) -> String? {
         let parts = url.pathComponents
         return parts.count == 3 && parts[1] == "join" ? parts[2] : nil
+    }
+
+    /// The share code in a plan link: https://…/p/<code>.
+    static func planCode(in url: URL) -> String? {
+        let parts = url.pathComponents
+        return parts.count == 3 && parts[1] == "p" ? parts[2] : nil
     }
 }

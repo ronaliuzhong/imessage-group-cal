@@ -26,7 +26,9 @@ struct GlanceTests {
                 segment(11, 12, busy: ["sam", "you"]),
                 segment(12, 14, busy: ["sam"]),
                 segment(14, 24, busy: []),
-            ]
+            ],
+            plans: [],
+            upcoming: []
         )
     }
 
@@ -51,6 +53,16 @@ struct GlanceTests {
         #expect(availability.status(of: "jo", at: at(10)) == nil)
         #expect(availability.status(of: "you", at: at(25)) == nil)
         #expect(availability.status(of: "nobody", at: at(10)) == nil)
+    }
+
+    @Test func findsWhoIsBusyDuringAProposedTime() {
+        // You: busy 9–12. Sam: busy 11–14.
+        #expect(availability.busyMembers(from: at(8), to: at(9))?.map(\.id) == [])
+        #expect(availability.busyMembers(from: at(8), to: at(10))?.map(\.id) == ["you"])
+        #expect(availability.busyMembers(from: at(10), to: at(13))?.map(\.id) == ["you", "sam"])
+        #expect(availability.busyMembers(from: at(12), to: at(15))?.map(\.id) == ["sam"])
+        // Outside the loaded day: unknown.
+        #expect(availability.busyMembers(from: at(23), to: at(25)) == nil)
     }
 
     @Test func countsWhoIsFree() {

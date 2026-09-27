@@ -15,6 +15,11 @@ struct GlanceView: View {
     let onToday: () -> Void
     let onInvite: () -> Void
     let onRefresh: () -> Void
+    /// Propose a plan: at a tapped time or a held-and-dragged range (start and
+    /// length in minutes), or (nil) the next hour.
+    let onPropose: (Date?, Int?) -> Void
+    /// Tapping a plan (on the calendar or in "Upcoming plans").
+    let onOpenPlan: (String) -> Void
 
     var body: some View {
         GeometryReader { panel in
@@ -26,7 +31,8 @@ struct GlanceView: View {
                     // arrows and Day | Week switch), so the current hours show
                     // without expanding it.
                     calendarHeight: min(max(panel.size.height - 150, 160), 460),
-                    onSpan: onSpan, onMove: onMove, onToday: onToday, onInvite: onInvite, onRefresh: onRefresh
+                    onSpan: onSpan, onMove: onMove, onToday: onToday, onInvite: onInvite, onRefresh: onRefresh,
+                    onPropose: onPropose, onOpenPlan: onOpenPlan
                 )
             }
         }
@@ -48,6 +54,8 @@ struct GlanceContent: View {
     let onToday: () -> Void
     let onInvite: () -> Void
     let onRefresh: () -> Void
+    let onPropose: (Date?, Int?) -> Void
+    let onOpenPlan: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -64,14 +72,29 @@ struct GlanceContent: View {
             VStack(alignment: .leading, spacing: 12) {
                 RangeNavigator(span: span, range: range, canGoBack: canGoBack, isLoading: isChangingRange,
                                onMove: onMove, onToday: onToday)
-                OverlapGrid(availability: availability, range: range, span: span, viewportHeight: calendarHeight)
+                OverlapGrid(availability: availability, range: range, span: span, viewportHeight: calendarHeight,
+                            onTapTime: { onPropose($0, nil) },
+                            onPickRange: { start, end in onPropose(start, Int(end.timeIntervalSince(start) / 60)) },
+                            onOpenPlan: onOpenPlan)
                     .opacity(isChangingRange ? 0.5 : 1)
                 SpanPicker(span: span, onSpan: onSpan)
+                Button { onPropose(nil, nil) } label: {
+                    Label("Propose a time", systemImage: "plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                Text("Or tap a time on the calendar, or hold and drag to pick a range.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
             }
             // "Right now" only makes sense when the day or week on screen
             // includes now.
             if range.contains(.now) {
                 FreeNowSection(availability: availability)
+            }
+            if !availability.upcoming.isEmpty {
+                UpcomingSection(plans: availability.upcoming, onOpenPlan: onOpenPlan)
             }
             WaitingSection(availability: availability, participantCount: participantCount, onInvite: onInvite)
         }
@@ -129,6 +152,48 @@ private struct FreeNowSection: View {
         case .free(until: nil): "Free the rest of the day"
         case .free(until: let time?): "Free until \(time.formatted(Self.clock))"
         case .busy(until: let time): "Busy until \(time.formatted(Self.clock))"
+        }
+    }
+}
+
+// MARK: - Upcoming plans
+
+private struct UpcomingSection: View {
+    let plans: [Availability.Plan]
+    let onOpenPlan: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Upcoming plans").font(.headline)
+            ForEach(plans) { plan in
+                Button { onOpenPlan(plan.shareCode) } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        Circle().fill(Color(hex: plan.color.hex)).frame(width: 10, height: 10).padding(.top, 5)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(plan.title).foregroundStyle(.primary)
+                            Text(PlanTime.describe(plan.start, plan.end))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            if let repeats = plan.repeatLabel {
+                                Text("↻ \(repeats)").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        Text(status(plan))
+                            .font(.footnote)
+                            .foregroundStyle(plan.myResponse == .going ? Color.green : Color.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func status(_ plan: Availability.Plan) -> String {
+        switch plan.myResponse {
+        case .going: "You're going"
+        case .notGoing: "Can't make it"
+        case nil: "\(plan.goingCount) going"
         }
     }
 }
@@ -250,6 +315,25 @@ private struct OverlapGrid: View {
     let span: ChatModel.Span
     /// Height of the scrolling box.
     let viewportHeight: CGFloat
+    /// Tapping the calendar proposes that time.
+    let onTapTime: (Date) -> Void
+    /// Holding and dragging proposes that range.
+    let onPickRange: (Date, Date) -> Void
+    /// Tapping a plan opens it.
+    let onOpenPlan: (String) -> Void
+
+    /// A range being held-and-dragged on one day column.
+    private struct DragPick: Equatable {
+        let day: Int
+        let range: ClosedRange<Int>
+    }
+
+    @GestureState private var dragging: DragPick?
+    /// Width of the day columns, to tell which day a touch is on.
+    @State private var columnsWidth: CGFloat = 0
+    /// When a hold-and-drag last finished: lifting the finger after holding
+    /// still can also count as a tap, which should be ignored.
+    @State private var lastPickAt = Date.distantPast
 
     private let labelWidth: CGFloat = 36
     private static let hourLabel = Date.FormatStyle().hour(.defaultDigits(amPM: .abbreviated))
@@ -293,15 +377,28 @@ private struct OverlapGrid: View {
                             }
                         }
                         HStack(spacing: 2) {
-                            ForEach(days, id: \.self) { day in
+                            ForEach(Array(days.enumerated()), id: \.element) { index, day in
                                 DayColumn(availability: availability, day: day, firstHour: 0,
-                                          hourHeight: hourHeight, total: total, compact: compact)
+                                          hourHeight: hourHeight, total: total, compact: compact,
+                                          dragRange: dragging?.day == index ? dragging?.range : nil,
+                                          onOpenPlan: onOpenPlan)
                             }
                         }
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { columnsWidth = $0 }
+                        .contentShape(Rectangle())
+                        .onTapGesture(coordinateSpace: .local) { location in
+                            guard Date.now.timeIntervalSince(lastPickAt) > 0.5,
+                                  let (day, minute) = locate(location) else { return }
+                            onTapTime(CalendarPick.tapTime(day: days[day], minute: minute))
+                        }
+                        .simultaneousGesture(pickGesture)
                     }
                     .frame(height: 24 * hourHeight)
                 }
                 .frame(height: viewportHeight)
+                // Hold still while a range is being dragged.
+                .scrollDisabled(dragging != nil)
+                .sensoryFeedback(.selection, trigger: dragging != nil)
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.2)))
                 .onAppear { proxy.scrollTo(openingHour, anchor: .top) }
                 // Switching day/week or moving to another one: open at the
@@ -322,6 +419,43 @@ private struct OverlapGrid: View {
                 .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Holding (about half a second) then dragging picks a range; a quick tap
+    /// (handled separately) picks a time. A quick swipe still scrolls, since
+    /// the hold fails as soon as the finger moves.
+    private var pickGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.45)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .updating($dragging) { value, state, _ in
+                if case .second(true, let drag?) = value {
+                    state = pick(from: drag.startLocation, to: drag.location)
+                }
+            }
+            .onEnded { value in
+                guard case .second(true, let drag?) = value,
+                      let picked = pick(from: drag.startLocation, to: drag.location)
+                else { return }
+                lastPickAt = .now
+                let (start, end) = CalendarPick.dates(day: days[picked.day], range: picked.range)
+                onPickRange(start, end)
+            }
+    }
+
+    /// Which day column a point is on, and how many minutes into that day.
+    private func locate(_ point: CGPoint) -> (day: Int, minute: Double)? {
+        let count = days.count
+        guard count > 0, columnsWidth > 0 else { return nil }
+        let columnWidth = (columnsWidth - 2 * CGFloat(count - 1)) / CGFloat(count)
+        let day = min(max(Int(point.x / (columnWidth + 2)), 0), count - 1)
+        let minute = min(max(Double(point.y / hourHeight) * 60, 0), Double(CalendarPick.dayMinutes))
+        return (day, minute)
+    }
+
+    private func pick(from start: CGPoint, to current: CGPoint) -> DragPick? {
+        guard let (day, downMinute) = locate(start) else { return nil }
+        let currentMinute = min(max(Double(current.y / hourHeight) * 60, 0), Double(CalendarPick.dayMinutes))
+        return DragPick(day: day, range: CalendarPick.dragRange(downMinute: downMinute, currentMinute: currentMinute))
     }
 
     private var dayHeader: some View {
@@ -352,6 +486,9 @@ private struct DayColumn: View {
     let hourHeight: CGFloat
     let total: Int
     let compact: Bool
+    /// The range being held-and-dragged on this day, in minutes into the day.
+    let dragRange: ClosedRange<Int>?
+    let onOpenPlan: (String) -> Void
 
     var body: some View {
         let calendar = Calendar.current
@@ -372,6 +509,10 @@ private struct DayColumn: View {
             ForEach(availability.segments.filter { $0.end > top && $0.start < end }, id: \.start) { segment in
                 block(for: segment, top: top, end: end)
             }
+            // Plans, on top of the free/busy view. Tapping one opens it.
+            ForEach(availability.plans.filter { $0.end > top && $0.start < end }) { plan in
+                planBlock(plan, top: top, end: end)
+            }
             // Fade time that's already passed.
             if now > top {
                 Rectangle()
@@ -389,7 +530,82 @@ private struct DayColumn: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .overlay(alignment: .top) {
+            if let dragRange { dragBox(dragRange) }
+        }
         .clipped()
+    }
+
+    /// Like the website: solid in the group's color if you're going, a dashed
+    /// outline if you haven't answered, faded and crossed out if you can't
+    /// make it.
+    @ViewBuilder
+    private func planBlock(_ plan: Availability.Plan, top: Date, end: Date) -> some View {
+        let blockTop = y(max(plan.start, top), from: top)
+        let height = max(y(min(plan.end, end), from: top) - blockTop, 14)
+        let color = Color(hex: plan.color.hex)
+        let going = plan.myResponse == .going
+        let declined = plan.myResponse == .notGoing
+        let shape = RoundedRectangle(cornerRadius: compact ? 4 : 6)
+        let clock = Date.FormatStyle(date: .omitted, time: .shortened)
+
+        shape
+            .fill(going ? color : color.opacity(0.15))
+            .overlay {
+                if !going {
+                    shape.strokeBorder(color, style: StrokeStyle(lineWidth: 2, dash: declined ? [] : [4, 3]))
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(plan.title)
+                        .fontWeight(.semibold)
+                        .strikethrough(declined)
+                    if !compact, height >= 34 {
+                        Text("\(plan.start.formatted(clock)) – \(plan.end.formatted(clock))")
+                    }
+                }
+                .font(compact ? .caption2 : .caption)
+                .foregroundStyle(going ? Color(hex: plan.color.text) : Color.primary)
+                .lineLimit(compact ? 3 : 2)
+                .padding(.horizontal, compact ? 2 : 6)
+                .padding(.top, 2)
+            }
+            .opacity(declined ? 0.5 : 1)
+            .padding(.horizontal, compact ? 1 : 3)
+            .frame(height: height)
+            .contentShape(shape)
+            .onTapGesture { onOpenPlan(plan.shareCode) }
+            .accessibilityAddTraits(.isButton)
+            .offset(y: blockTop)
+            .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    /// The range being dragged: its times and how many are free for all of it.
+    private func dragBox(_ range: ClosedRange<Int>) -> some View {
+        let start = day.addingTimeInterval(Double(range.lowerBound) * 60)
+        let end = day.addingTimeInterval(Double(range.upperBound) * 60)
+        let clock = Date.FormatStyle(date: .omitted, time: .shortened)
+        let busy = availability.busyMembers(from: start, to: end)?.count
+        return RoundedRectangle(cornerRadius: compact ? 4 : 6)
+            .fill(Color.accentColor.opacity(0.15))
+            .strokeBorder(Color.accentColor, lineWidth: 2)
+            .overlay(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(compact ? start.formatted(clock) : "\(start.formatted(clock)) – \(end.formatted(clock))")
+                        .fontWeight(.semibold)
+                    if let busy, total > 0 {
+                        Text("\(total - busy)/\(total) free")
+                    }
+                }
+                .font(compact ? .caption2 : .caption)
+                .foregroundStyle(Color.accentColor)
+                .lineLimit(2)
+                .padding(.horizontal, compact ? 2 : 6)
+                .padding(.top, 2)
+            }
+            .frame(height: CGFloat(range.upperBound - range.lowerBound) / 60 * hourHeight)
+            .offset(y: CGFloat(range.lowerBound) / 60 * hourHeight)
     }
 
     /// Busy time is drawn as blocks, like events in Google Calendar: the more

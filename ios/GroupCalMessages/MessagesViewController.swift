@@ -16,6 +16,10 @@ final class MessagesViewController: MSMessagesAppViewController {
             guard let conversation = self?.activeConversation else { return }
             try await conversation.insert(message)
         }
+        model.sendMessage = { [weak self] message in
+            guard let conversation = self?.activeConversation else { return }
+            try await conversation.send(message)
+        }
 
         let host = UIHostingController(rootView: MessagesRootView(model: model))
         addChild(host)

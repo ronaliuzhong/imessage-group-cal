@@ -14,9 +14,10 @@ import { normalizeColor } from "@/lib/colors";
 import { prisma } from "@/lib/db";
 import { deleteEvent } from "@/lib/google";
 import { createGroupFor, joinGroupFor } from "@/lib/groups";
+import { createPlanFor, parseOccurrence, setRsvpFor } from "@/lib/plan-writes";
 import { parsePlanInput, repeatChanged, type PlanFields, type PlanInput } from "@/lib/plan-input";
 import { carryOverDates, planAllEdit } from "@/lib/edit-all";
-import { findOccurrence, ruleOf, shiftWeekdays } from "@/lib/plan-occurrences";
+import { ruleOf, shiftWeekdays } from "@/lib/plan-occurrences";
 import { isOccurrenceStart, localDate, seriesEnd } from "@/lib/recurrence";
 import { requireUser } from "@/lib/session";
 
@@ -120,27 +121,10 @@ export async function createPlan(
   input: PlanInput,
 ): Promise<{ shareCode: string } | { error: string }> {
   const user = await requireUser();
-  const membership = await prisma.groupMember.findUnique({
-    where: { groupId_userId: { groupId, userId: user.id } },
-  });
-  if (!membership) return { error: "You're not in this group." };
-
-  const parsed = parsePlanInput(input);
-  if ("error" in parsed) return parsed;
-
-  const plan = await prisma.plan.create({
-    data: {
-      ...parsed.fields,
-      groupId,
-      createdById: user.id,
-      shareCode: randomBytes(12).toString("base64url"),
-      // The organizer is presumably going to their own plan (all of it).
-      rsvps: { create: { userId: user.id, response: "GOING" } },
-    },
-  });
-  await syncPlanForUser(plan.id, user.id);
+  const result = await createPlanFor(user.id, groupId, input);
+  if ("error" in result) return { error: result.error };
   revalidatePath(`/groups/${groupId}`);
-  return { shareCode: plan.shareCode };
+  return { shareCode: result.plan.shareCode };
 }
 
 // A plan the signed-in user may change: it exists, isn't cancelled, and
@@ -154,14 +138,6 @@ async function editablePlan(planId: string, userId: string) {
   return membership ? plan : null;
 }
 type EditablePlan = NonNullable<Awaited<ReturnType<typeof editablePlan>>>;
-
-// Parses the "which date" parameter and checks it's a real date of the plan.
-function parseOccurrence(plan: EditablePlan, value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return findOccurrence(plan, plan.exceptions, date) ? date : null;
-}
 
 // "YYYY-MM-DD" minus one day.
 function dayBefore(date: string): string {
@@ -527,27 +503,6 @@ export async function undoCancel(undoId: string): Promise<{ ok: true } | { error
 export async function setRsvp(planId: string, response: "GOING" | "NOT_GOING", occurrence?: string | null) {
   const user = await requireUser();
   if (response !== "GOING" && response !== "NOT_GOING") throw new Error("Invalid RSVP");
-  const plan = await prisma.plan.findUnique({ where: { id: planId }, include: { exceptions: true } });
-  if (!plan || plan.cancelledAt) return;
-
-  const originalStart = plan.repeatFreq ? parseOccurrence(plan, occurrence) : null;
-  if (originalStart) {
-    await prisma.occurrenceRsvp.upsert({
-      where: { planId_userId_originalStart: { planId, userId: user.id, originalStart } },
-      create: { planId, userId: user.id, originalStart, response },
-      update: { response },
-    });
-  } else {
-    // "All of them" replaces any per-date answers, like Google Calendar.
-    const dateRsvps = await prisma.occurrenceRsvp.findMany({ where: { planId, userId: user.id } });
-    for (const r of dateRsvps) if (r.googleEventId) await deleteEvent(user.id, r.googleEventId);
-    await prisma.occurrenceRsvp.deleteMany({ where: { planId, userId: user.id } });
-    await prisma.rsvp.upsert({
-      where: { planId_userId: { planId, userId: user.id } },
-      create: { planId, userId: user.id, response },
-      update: { response },
-    });
-  }
-  await syncPlanForUser(planId, user.id);
+  if (!(await setRsvpFor(user.id, planId, response, occurrence))) return;
   revalidatePath("/", "layout");
 }
