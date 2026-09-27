@@ -1,0 +1,8 @@
+# Generated from project.yml by XcodeGen.
+GroupCal.xcodeproj/
+GroupCal/Info.plist
+
+# Xcode's per-person and build files.
+xcuserdata/
+DerivedData/
+build/

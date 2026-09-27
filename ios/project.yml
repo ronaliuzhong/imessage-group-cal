@@ -1,0 +1,70 @@
+# The iPhone app's Xcode project, described for XcodeGen
+# (https://github.com/yonaskolb/XcodeGen). The real project file,
+# GroupCal.xcodeproj, is generated from this one and isn't in git:
+#
+#   brew install xcodegen      # once
+#   cd ios && xcodegen         # after cloning, and after changing this file
+#   open GroupCal.xcodeproj
+#
+# Change project settings here, not in Xcode: Xcode's changes are lost the
+# next time the project is generated.
+
+name: GroupCal
+
+options:
+  bundleIdPrefix: com.ronaliuzhong
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    # Set once there's an Apple Developer account (needed for real phones).
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  # The app you open from the home screen. For now: signing in.
+  GroupCal:
+    type: application
+    platform: iOS
+    sources: [GroupCal]
+    info:
+      path: GroupCal/Info.plist
+      properties:
+        # "Group Cal" is a placeholder until the app is named.
+        CFBundleDisplayName: Group Cal
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # The server the app talks to (see API_BASE_URL below).
+        API_BASE_URL: $(API_BASE_URL)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # Lets the simulator reach the dev server on http://localhost.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ronaliuzhong.groupcal
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1" # iPhone only
+      configs:
+        # Debug (running from Xcode): your Mac's dev server.
+        Debug:
+          API_BASE_URL: http://localhost:3000
+        # Release (TestFlight, App Store): the live site.
+        Release:
+          API_BASE_URL: https://imessage-group-cal.vercel.app
+    scheme:
+      testTargets: [GroupCalTests]
+
+  GroupCalTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [GroupCalTests]
+    dependencies:
+      - target: GroupCal
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES

@@ -144,8 +144,29 @@ npm run lint        # ESLint
   Calendar. The live site and your local copy use different databases, so
   you may end up with two. Renaming the local one "Group Cal (test)" helps.
 
-## Phase 2 (iMessage extension) needs
+## The iPhone app (`ios/`)
 
-- **Xcode**, which needs macOS 26.6 or newer.
-- Later, the project's Apple Developer account, for running on real phones
-  and TestFlight.
+Phase 2 lives in `ios/`. It needs **Xcode** (macOS 26.6 or newer) with the
+iOS platform installed. Later, it needs the project's Apple Developer
+account for real phones and TestFlight.
+
+The Xcode project is generated from `ios/project.yml` by
+[XcodeGen](https://github.com/yonaskolb/XcodeGen), so the generated
+`GroupCal.xcodeproj` isn't in git:
+
+```sh
+brew install xcodegen      # once
+cd ios && xcodegen         # after cloning, pulling, or editing project.yml
+open GroupCal.xcodeproj
+```
+
+- **Change project settings in `project.yml`,** not in Xcode's settings
+  screens. Xcode's changes are lost the next time the project is generated.
+  New Swift files in `ios/GroupCal/` are picked up automatically.
+- **Running from Xcode talks to your dev server** (`http://localhost:3000`),
+  so keep `npm run dev` running. Release builds use the live site.
+- **Sign-in:** the app opens `/app-auth` in a secure browser window, you
+  sign in with Google, and the server hands the app a token. It's explained
+  at the top of `src/lib/app-auth.ts`.
+- **Tests:** press Cmd+U in Xcode, or run
+  `xcodebuild -project GroupCal.xcodeproj -scheme GroupCal -destination 'platform=iOS Simulator,name=iPhone 17' test`.
