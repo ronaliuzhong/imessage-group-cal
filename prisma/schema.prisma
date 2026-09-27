@@ -30,6 +30,8 @@ model User {
   plansCreated  Plan[]
   rsvps         Rsvp[]
   occurrenceRsvps OccurrenceRsvp[]
+  appAuthCodes  AppAuthCode[]
+  appTokens     AppToken[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -67,6 +69,39 @@ model Session {
   updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// iPhone app sign-in (see src/lib/app-auth.ts). The app signs in through the
+// website's Google sign-in, gets a one-time code, and trades it for a token.
+// Only hashes are stored, so a database leak doesn't expose usable secrets.
+// ---------------------------------------------------------------------------
+
+// A one-time code handed to the app right after sign-in. Lives two minutes;
+// deleted when used.
+model AppAuthCode {
+  codeHash      String   @id
+  userId        String
+  // PKCE: the app proves it's the one that started this sign-in.
+  codeChallenge String
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// A signed-in copy of the app. The app sends the token with every request;
+// deleting the row signs that device out.
+model AppToken {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // Required by the Auth.js adapter (used for email sign-in links); unused for now.

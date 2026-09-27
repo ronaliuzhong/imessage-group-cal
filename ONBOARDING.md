@@ -111,6 +111,7 @@ npm run lint        # ESLint
 | `src/lib/google.ts` | Talking to Google Calendar |
 | `src/lib/calendar-sync.ts` | Keeping each person's "Group Cal" calendar in step with their plans |
 | `src/lib/recurrence.ts`, `plan-occurrences.ts`, `edit-all.ts` | Repeating plans and "this / following / all" edits |
+| `src/lib/app-auth.ts`, `src/app/app-auth/`, `src/app/api/app/` | How the iPhone app signs in, and the endpoints it calls |
 | `prisma/schema.prisma` | The database tables |
 
 ## Everyday workflow
