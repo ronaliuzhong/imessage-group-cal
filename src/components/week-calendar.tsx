@@ -334,7 +334,7 @@ function CalendarGrid({
                     const top = minutesIntoDay(new Date(Math.max(segment.start, dayStart.getTime())));
                     const bottom =
                       segment.end >= dayEnd.getTime() ? 24 * 60 : minutesIntoDay(new Date(segment.end));
-                    const look = blockLook(segment, connected.length, variant);
+                    const look = blockLook(segment, connected.length, variant, nameOf);
                     return (
                       <div
                         key={segment.start}
@@ -504,30 +504,44 @@ function planStyle(plan: CalendarPlan): React.CSSProperties {
   };
 }
 
-// How a block is colored/labeled.
-function blockLook(segment: Segment, memberCount: number, variant: Props["variant"]) {
-  const free = memberCount - segment.busyMemberIds.length;
+// Busy time is drawn as gray blocks, like events in Google Calendar: the more
+// people busy, the darker. Empty space means everyone's free. (The iPhone
+// app's calendar looks the same.)
+const BUSY_RGB = "113, 113, 122"; // Tailwind zinc-500
+const busyOpacity = (busy: number, total: number) => 0.2 + 0.4 * (busy / total);
 
-  // shortLabel is for phones, where each day column is only ~45px wide.
+// How a block is colored/labeled. shortLabel is for phones, where each day
+// column is only ~45px wide.
+function blockLook(
+  segment: Segment,
+  memberCount: number,
+  variant: Props["variant"],
+  nameOf: (id: string) => string,
+) {
+  const busy = segment.busyMemberIds;
+  const free = { className: "hover:bg-zinc-50 dark:hover:bg-zinc-900", label: "", shortLabel: "", style: {} };
+
   if (variant === "personal") {
-    return free === 0
+    return busy.length
       ? { className: "bg-zinc-300 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100", label: "Busy", shortLabel: "Busy", style: {} }
-      : { className: "hover:bg-emerald-50 dark:hover:bg-emerald-950", label: "", shortLabel: "", style: {} };
+      : free;
   }
 
-  if (memberCount === 0 || free === 0) {
-    return { className: "hover:bg-zinc-100 dark:hover:bg-zinc-900", label: "", shortLabel: "", style: {} };
+  if (memberCount === 0 || busy.length === 0) return free;
+  if (busy.length >= memberCount) {
+    return {
+      className: "bg-zinc-500 font-medium text-white dark:bg-zinc-600",
+      label: memberCount === 1 ? "Busy" : "Everyone busy",
+      shortLabel: memberCount === 1 ? "Busy" : "All busy",
+      style: {},
+    };
   }
-  if (free === memberCount) {
-    return { className: "bg-emerald-500 font-medium text-white", label: "Everyone free", shortLabel: "All free", style: {} };
-  }
-  // Partially free: the more people free, the stronger the green.
-  const opacity = 0.12 + 0.5 * (free / memberCount);
+  // Some busy: name them when there's room ("Sam & Alex busy").
   return {
-    className: "text-emerald-900 dark:text-emerald-100",
-    label: `${free}/${memberCount} free`,
-    shortLabel: `${free}/${memberCount}`,
-    style: { backgroundColor: `rgba(16, 185, 129, ${opacity})` },
+    className: "text-zinc-900 dark:text-zinc-100",
+    label: busy.length <= 2 ? `${busy.map(nameOf).join(" & ")} busy` : `${busy.length} busy`,
+    shortLabel: `${busy.length} busy`,
+    style: { backgroundColor: `rgba(${BUSY_RGB}, ${busyOpacity(busy.length, memberCount)})` },
   };
 }
 
@@ -567,16 +581,17 @@ function Legend({ variant, hasPlans }: { variant: Props["variant"]; hasPlans: bo
     <div className="flex flex-wrap gap-4 text-sm text-zinc-600 dark:text-zinc-400">
       {variant === "group" ? (
         <>
-          <span><span className={`${swatch} bg-emerald-500`} /> Everyone free</span>
-          <span><span className={swatch} style={{ backgroundColor: "rgba(16,185,129,0.35)" }} /> Some free</span>
-          <span><span className={`${swatch} border border-zinc-300 dark:border-zinc-700`} /> Nobody free</span>
+          <span><span className={`${swatch} border border-zinc-300 dark:border-zinc-700`} /> Everyone free</span>
+          <span><span className={swatch} style={{ backgroundColor: `rgba(${BUSY_RGB}, ${busyOpacity(1, 3)})` }} /> Some busy</span>
+          <span><span className={`${swatch} bg-zinc-500 dark:bg-zinc-600`} /> Everyone busy</span>
         </>
       ) : (
         <span><span className={`${swatch} bg-zinc-300 dark:bg-zinc-700`} /> Busy</span>
       )}
-      {/* Plans use their group's color, so these swatches are neutral. */}
-      <span><span className={`${swatch} bg-zinc-600 dark:bg-zinc-400`} /> Plan you&apos;re going to</span>
-      <span><span className={`${swatch} border-2 border-dashed border-zinc-600 dark:border-zinc-400`} /> Plan you haven&apos;t answered</span>
+      {/* Plans use their group's color; a sample color keeps these swatches
+          from looking like gray busy time. */}
+      <span><span className={`${swatch} bg-violet-500`} /> Plan you&apos;re going to</span>
+      <span><span className={`${swatch} border-2 border-dashed border-violet-500`} /> Plan you haven&apos;t answered</span>
       {variant === "group" && (
         <>
           <span className="text-zinc-500 sm:hidden">Tap a time to see who&apos;s free · hold and drag to propose one.</span>

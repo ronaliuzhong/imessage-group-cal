@@ -35,7 +35,8 @@ final class ChatModel {
     /// Everyone in the chat, including you.
     private(set) var participantCount = 1
 
-    private(set) var span: Span = .day
+    /// Opens on the week; the Day | Week switch is under the calendar.
+    private(set) var span: Span = .week
     /// Days (day view) or weeks (week view) from now. Never negative: like
     /// the website, you can look ahead but not back.
     private(set) var offset = 0

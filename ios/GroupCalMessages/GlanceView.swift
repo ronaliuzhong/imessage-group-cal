@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// A chat's group at a glance: who's free right now, who we're still waiting
-/// for, and the overlap calendar for a day or a week.
+/// A chat's group at a glance: the overlap calendar for a week or a day, then
+/// who's free right now and who we're still waiting for.
 struct GlanceView: View {
     let availability: Availability
     /// Everyone in the chat, including you (from Messages).
@@ -17,12 +17,18 @@ struct GlanceView: View {
     let onRefresh: () -> Void
 
     var body: some View {
-        ScrollView {
-            GlanceContent(
-                availability: availability, participantCount: participantCount, span: span, range: range,
-                canGoBack: canGoBack, isChangingRange: isChangingRange, onSpan: onSpan, onMove: onMove,
-                onToday: onToday, onInvite: onInvite, onRefresh: onRefresh
-            )
+        GeometryReader { panel in
+            ScrollView {
+                GlanceContent(
+                    availability: availability, participantCount: participantCount, span: span, range: range,
+                    canGoBack: canGoBack, isChangingRange: isChangingRange,
+                    // Fit the calendar to the panel (leaving room for the name,
+                    // arrows and Day | Week switch), so the current hours show
+                    // without expanding it.
+                    calendarHeight: min(max(panel.size.height - 150, 160), 460),
+                    onSpan: onSpan, onMove: onMove, onToday: onToday, onInvite: onInvite, onRefresh: onRefresh
+                )
+            }
         }
     }
 }
@@ -35,6 +41,8 @@ struct GlanceContent: View {
     let range: DateInterval
     let canGoBack: Bool
     let isChangingRange: Bool
+    /// Height of the calendar's scrolling area.
+    let calendarHeight: CGFloat
     let onSpan: (ChatModel.Span) -> Void
     let onMove: (Int) -> Void
     let onToday: () -> Void
@@ -52,19 +60,20 @@ struct GlanceContent: View {
                 }
                 .accessibilityLabel("Refresh")
             }
+            // The calendar comes first; the Day | Week switch sits under it.
+            VStack(alignment: .leading, spacing: 12) {
+                RangeNavigator(span: span, range: range, canGoBack: canGoBack, isLoading: isChangingRange,
+                               onMove: onMove, onToday: onToday)
+                OverlapGrid(availability: availability, range: range, span: span, viewportHeight: calendarHeight)
+                    .opacity(isChangingRange ? 0.5 : 1)
+                SpanPicker(span: span, onSpan: onSpan)
+            }
             // "Right now" only makes sense when the day or week on screen
             // includes now.
             if range.contains(.now) {
                 FreeNowSection(availability: availability)
             }
             WaitingSection(availability: availability, participantCount: participantCount, onInvite: onInvite)
-            VStack(alignment: .leading, spacing: 12) {
-                SpanPicker(span: span, onSpan: onSpan)
-                RangeNavigator(span: span, range: range, canGoBack: canGoBack, isLoading: isChangingRange,
-                               onMove: onMove, onToday: onToday)
-                OverlapGrid(availability: availability, range: range, span: span)
-                    .opacity(isChangingRange ? 0.5 : 1)
-            }
         }
         .padding()
     }
@@ -231,13 +240,16 @@ private struct RangeNavigator: View {
 
 // MARK: - The overlap calendar
 
-/// One or seven day columns, shaded by how many people are free (the same
-/// look as the website's heat map). The week view uses short labels, like
-/// the website on phones.
+/// One or seven day columns. Busy time is drawn as gray blocks (darker = more
+/// people busy), like events in Google Calendar, so the empty gaps are when
+/// everyone's free. The week view uses short labels. The whole day scrolls
+/// inside its own box, opening at the current hour.
 private struct OverlapGrid: View {
     let availability: Availability
     let range: DateInterval
     let span: ChatModel.Span
+    /// Height of the scrolling box.
+    let viewportHeight: CGFloat
 
     private let labelWidth: CGFloat = 36
     private static let hourLabel = Date.FormatStyle().hour(.defaultDigits(amPM: .abbreviated))
@@ -256,42 +268,55 @@ private struct OverlapGrid: View {
         return days
     }
 
-    /// First hour shown. Today's day view starts at the current hour (but
-    /// always shows at least the last 4 hours); otherwise 6 AM.
-    private var firstHour: Int {
-        if span == .day, Calendar.current.isDateInToday(range.start) {
-            return min(Calendar.current.component(.hour, from: .now), 20)
-        }
-        return 6
+    /// Where the calendar opens: the current hour (3:25 PM → the 3 PM row at
+    /// the top) when now is on screen, otherwise 7 AM like the website.
+    private var openingHour: Int {
+        range.contains(.now) ? Calendar.current.component(.hour, from: .now) : 7
     }
 
     var body: some View {
         let total = availability.connectedMembers.count
-        let hours = 24 - firstHour
 
         VStack(alignment: .leading, spacing: 6) {
+            // Day names stay put while the hours scroll underneath.
             if days.count > 1 { dayHeader }
-            HStack(alignment: .top, spacing: 4) {
-                VStack(alignment: .trailing, spacing: 0) {
-                    ForEach(firstHour..<24, id: \.self) { hour in
-                        Text(Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: range.start)!.formatted(Self.hourLabel))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .frame(width: labelWidth, height: hourHeight, alignment: .topTrailing)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    HStack(alignment: .top, spacing: 4) {
+                        VStack(alignment: .trailing, spacing: 0) {
+                            ForEach(0..<24, id: \.self) { hour in
+                                Text(Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: range.start)!.formatted(Self.hourLabel))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: labelWidth, height: hourHeight, alignment: .topTrailing)
+                                    .id(hour)
+                            }
+                        }
+                        HStack(spacing: 2) {
+                            ForEach(days, id: \.self) { day in
+                                DayColumn(availability: availability, day: day, firstHour: 0,
+                                          hourHeight: hourHeight, total: total, compact: compact)
+                            }
+                        }
                     }
+                    .frame(height: 24 * hourHeight)
                 }
-                HStack(spacing: 2) {
-                    ForEach(days, id: \.self) { day in
-                        DayColumn(availability: availability, day: day, firstHour: firstHour,
-                                  hourHeight: hourHeight, total: total, compact: compact)
-                    }
-                }
+                .frame(height: viewportHeight)
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.2)))
+                .onAppear { proxy.scrollTo(openingHour, anchor: .top) }
+                // Switching day/week or moving to another one: open at the
+                // right hour again.
+                .onChange(of: range) { proxy.scrollTo(openingHour, anchor: .top) }
             }
-            .frame(height: CGFloat(hours) * hourHeight)
             if total > 0 {
                 HStack(spacing: 12) {
-                    Swatch(color: .green, label: "Everyone free")
-                    Swatch(color: .green.opacity(0.35), label: "Some free")
+                    Swatch(color: .clear, label: "Everyone free")
+                    if total > 1 {
+                        Swatch(color: DayColumn.busyColor(busy: 1, of: 3), label: "Some busy")
+                        Swatch(color: DayColumn.busyColor(busy: 1, of: 1), label: "Everyone busy")
+                    } else {
+                        Swatch(color: DayColumn.busyColor(busy: 1, of: 1), label: "Busy")
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -367,20 +392,29 @@ private struct DayColumn: View {
         .clipped()
     }
 
+    /// Busy time is drawn as blocks, like events in Google Calendar: the more
+    /// people busy, the darker. Empty space means everyone's free.
+    static func busyColor(busy: Int, of total: Int) -> Color {
+        busy >= total ? Color(uiColor: .systemGray) : Color(uiColor: .systemGray).opacity(0.2 + 0.4 * Double(busy) / Double(total))
+    }
+
     @ViewBuilder
     private func block(for segment: Availability.Segment, top: Date, end: Date) -> some View {
-        let free = availability.freeCount(in: segment)
+        let busy = segment.busyMemberIds.count
         let blockTop = y(max(segment.start, top), from: top)
         let height = y(min(segment.end, end), from: top) - blockTop
-        if total > 0, free > 0 {
-            let everyone = free == total
+        if total > 0, busy > 0 {
+            let everyone = busy >= total
+            // White text on the dark "everyone busy" block, except where the
+            // label sits in the faded past, which would make it unreadable.
+            let whiteText = everyone && max(segment.start, top) >= .now
             RoundedRectangle(cornerRadius: compact ? 4 : 6)
-                .fill(everyone ? Color.green : Color.green.opacity(0.12 + 0.5 * Double(free) / Double(total)))
+                .fill(Self.busyColor(busy: busy, of: total))
                 .overlay(alignment: .topLeading) {
                     if height >= 16 {
-                        Text(label(free: free, everyone: everyone))
+                        Text(label(for: segment, everyone: everyone))
                             .font((compact ? Font.caption2 : Font.caption).weight(everyone ? .semibold : .regular))
-                            .foregroundStyle(everyone ? Color.white : Color.primary)
+                            .foregroundStyle(whiteText ? Color.white : Color.primary)
                             .lineLimit(2)
                             .padding(.horizontal, compact ? 2 : 6)
                             .padding(.top, 2)
@@ -393,11 +427,17 @@ private struct DayColumn: View {
         }
     }
 
-    /// Phones' week view is narrow: "All" / "2/3" instead of "Everyone free" /
-    /// "2/3 free".
-    private func label(free: Int, everyone: Bool) -> String {
-        if everyone { return total == 1 ? "Free" : (compact ? "All free" : "Everyone free") }
-        return compact ? "\(free)/\(total)" : "\(free)/\(total) free"
+    /// The day view has room to say who's busy ("Sam & Alex busy"); the
+    /// narrow week columns show a count ("2 busy").
+    private func label(for segment: Availability.Segment, everyone: Bool) -> String {
+        if everyone { return total == 1 ? "Busy" : (compact ? "All busy" : "Everyone busy") }
+        let busy = segment.busyMemberIds
+        if compact || busy.count > 2 { return "\(busy.count) busy" }
+        let names = busy.map { id in
+            let member = availability.members.first { $0.id == id }
+            return member?.isYou == true ? "You" : (member?.name ?? "Someone")
+        }
+        return "\(names.joined(separator: " & ")) busy"
     }
 
     private func y(_ time: Date, from top: Date) -> CGFloat {
@@ -411,7 +451,10 @@ private struct Swatch: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 10, height: 10)
+            RoundedRectangle(cornerRadius: 2)
+                .fill(color)
+                .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color.secondary.opacity(0.4)))
+                .frame(width: 10, height: 10)
             Text(label)
         }
     }
