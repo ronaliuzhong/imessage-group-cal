@@ -171,6 +171,11 @@ open GroupCal.xcodeproj
   the App Group `group.com.ronaliuzhong.groupcal`.
 - **Trying the extension:** pick the `GroupCalMessages` scheme at the top of
   Xcode, press Run, and choose **Messages** when asked which app to run.
+- **On your own iPhone:** `DEVELOPMENT_TEAM` in `project.yml` is Rona's
+  team. To install on your phone, put your own team ID there (Xcode →
+  Settings → Accounts; a free Personal Team works, but apps it installs stop
+  working after 7 days), plug in the phone, turn on Developer Mode, and run
+  the `GroupCal` scheme on it. Phone builds use the live site, not your Mac.
 - **Sign-in:** the app opens `/app-auth` in a secure browser window, you
   sign in with Google, and the server hands the app a token. It's explained
   at the top of `src/lib/app-auth.ts`.

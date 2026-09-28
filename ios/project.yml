@@ -20,16 +20,23 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    # Set once there's an Apple Developer account (needed for real phones).
-    DEVELOPMENT_TEAM: ""
+    # Who signs the app for real phones. For now Rona's free Personal Team
+    # (apps it installs stop working after 7 days); switch to the paid Apple
+    # Developer team for TestFlight. Others building for their own phone put
+    # their own team ID here (Xcode → Settings → Accounts).
+    DEVELOPMENT_TEAM: 2S3HFH76VR
+    CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"
     TARGETED_DEVICE_FAMILY: "1" # iPhone only
   configs:
     # The server the app and extension talk to (read via Config.swift).
-    # Debug (running from Xcode): your Mac's dev server.
+    # Debug (running from Xcode): your Mac's dev server in the simulator. A
+    # real iPhone can't reach your Mac's localhost (and Google sign-in only
+    # accepts localhost from the Mac), so phones use the live site.
     Debug:
       API_BASE_URL: http://localhost:3000
+      "API_BASE_URL[sdk=iphoneos*]": https://imessage-group-cal.vercel.app
     # Release (TestFlight, App Store): the live site.
     Release:
       API_BASE_URL: https://imessage-group-cal.vercel.app
@@ -95,7 +102,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ronaliuzhong.groupcal.messages
-    scheme: {}
 
   GroupCalTests:
     type: bundle.unit-test
@@ -106,3 +112,18 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  # Runs the iMessage extension inside Messages. It builds the Group Cal app
+  # too: an extension can only be installed inside its app, so on a real
+  # iPhone building the extension alone installs nothing.
+  GroupCalMessages:
+    build:
+      targets:
+        GroupCal: all
+        GroupCalMessages: all
+    run:
+      config: Debug
+      askForAppToLaunch: true
+    archive:
+      config: Release
