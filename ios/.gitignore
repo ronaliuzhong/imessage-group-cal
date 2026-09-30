@@ -3,6 +3,9 @@ GroupCal.xcodeproj/
 */Info.plist
 */*.entitlements
 
+# Each person's own signing team and app IDs (see Signing.xcconfig).
+Signing.local.xcconfig
+
 # Xcode's per-person and build files.
 xcuserdata/
 DerivedData/

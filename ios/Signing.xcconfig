@@ -1,0 +1,16 @@
+// Who signs the app, and the IDs it registers with Apple. These defaults are
+// Rona's. Apple ties an app ID to the account that registered it first, so
+// to build for your own iPhone with your own Apple account, create
+// Signing.local.xcconfig next to this file (it's not in git) containing:
+//
+//   DEVELOPMENT_TEAM = ABCDE12345     (Xcode → Settings → Accounts → your team)
+//   BUNDLE_ID_PREFIX = com.yourname
+//
+// Then run `xcodegen` again. The simulator doesn't need any of this.
+
+// Rona's free Personal Team: apps it installs stop working after 7 days.
+// Switch to the paid Apple Developer team for TestFlight.
+DEVELOPMENT_TEAM = 2S3HFH76VR
+BUNDLE_ID_PREFIX = com.ronaliuzhong
+
+#include? "Signing.local.xcconfig"

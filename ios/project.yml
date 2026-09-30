@@ -17,15 +17,19 @@ options:
     iOS: "18.0"
   createIntermediateGroups: true
 
+# Who signs the app and the IDs it uses (DEVELOPMENT_TEAM, BUNDLE_ID_PREFIX)
+# live in Signing.xcconfig, so each person can use their own Apple account
+# for their own phone without changing this file. See Signing.xcconfig.
+configFiles:
+  Debug: Signing.xcconfig
+  Release: Signing.xcconfig
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    # Who signs the app for real phones. For now Rona's free Personal Team
-    # (apps it installs stop working after 7 days); switch to the paid Apple
-    # Developer team for TestFlight. Others building for their own phone put
-    # their own team ID here (Xcode → Settings → Accounts).
-    DEVELOPMENT_TEAM: 2S3HFH76VR
     CODE_SIGN_STYLE: Automatic
+    # The App Group lets the app and the extension share the saved sign-in.
+    APP_GROUP_ID: group.$(BUNDLE_ID_PREFIX).groupcal
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"
     TARGETED_DEVICE_FAMILY: "1" # iPhone only
@@ -48,15 +52,16 @@ infoShared: &infoShared
   CFBundleShortVersionString: $(MARKETING_VERSION)
   CFBundleVersion: $(CURRENT_PROJECT_VERSION)
   API_BASE_URL: $(API_BASE_URL)
+  # Read by TokenStore (Shared/TokenStore.swift).
+  AppGroupID: $(APP_GROUP_ID)
   # Lets the simulator reach the dev server on http://localhost.
   NSAppTransportSecurity:
     NSAllowsLocalNetworking: true
 
 # The App Group lets the app and the extension share the saved sign-in.
-# Must match TokenStore.appGroup in Shared/TokenStore.swift.
 entitlementsShared: &entitlementsShared
   com.apple.security.application-groups:
-    - group.com.ronaliuzhong.groupcal
+    - $(APP_GROUP_ID)
 
 targets:
   # The app you open from the home screen (kept minimal; see ROADMAP.md).
@@ -79,7 +84,7 @@ targets:
       properties: *entitlementsShared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ronaliuzhong.groupcal
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).groupcal
     scheme:
       testTargets: [GroupCalTests]
 
@@ -101,7 +106,7 @@ targets:
       properties: *entitlementsShared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ronaliuzhong.groupcal.messages
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).groupcal.messages
 
   GroupCalTests:
     type: bundle.unit-test

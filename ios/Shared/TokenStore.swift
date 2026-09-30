@@ -5,8 +5,16 @@ import Security
 /// password storage. It's stored under the App Group, so the app signs in
 /// once and the iMessage extension (and later the widget) can use it too.
 enum TokenStore {
-    /// Must match the App Group in project.yml.
-    static let appGroup = "group.com.ronaliuzhong.groupcal"
+    /// The App Group ID, from Info.plist (set in project.yml from
+    /// Signing.xcconfig, so it follows whoever's Apple account builds it).
+    static let appGroup: String = {
+        guard let id = Bundle.main.object(forInfoDictionaryKey: "AppGroupID") as? String, !id.isEmpty else {
+            fatalError("AppGroupID is missing from Info.plist (see project.yml)")
+        }
+        return id
+    }()
+    /// Just a label for the Keychain entry. Changing it would sign everyone
+    /// out once, so it stays as it was.
     private static let service = "com.ronaliuzhong.groupcal"
     private static let account = "appToken"
 
