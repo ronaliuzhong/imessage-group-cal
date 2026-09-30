@@ -1,8 +1,15 @@
 import SwiftUI
 
-/// Filling in a plan to propose. The time comes from where the calendar was
-/// tapped; it warns if anyone's busy then, like the website.
+/// Filling in a plan: proposing a new one (the time comes from where the
+/// calendar was tapped) or editing one. It warns if anyone's busy then, like
+/// the website.
 struct ProposeForm: View {
+    var heading = "Propose a time"
+    var submitLabel = "Send plan"
+    /// Shown under the buttons.
+    var footnote: String? = "You'll be marked as going, and it's added to your Google Calendar."
+    var initialTitle = ""
+    var initialLocation = ""
     let initialStart: Date
     /// Length in minutes (from a held-and-dragged range, or 60).
     let initialMinutes: Int
@@ -20,17 +27,29 @@ struct ProposeForm: View {
     private static let lengths = [30, 60, 90, 120, 180, 240]
 
     init(
+        heading: String = "Propose a time",
+        submitLabel: String = "Send plan",
+        footnote: String? = "You'll be marked as going, and it's added to your Google Calendar.",
+        initialTitle: String = "",
+        initialLocation: String = "",
         initialStart: Date,
         initialMinutes: Int = 60,
         availability: Availability?,
         onSend: @escaping (String, Date, Int, String) -> Void,
         onCancel: @escaping () -> Void
     ) {
+        self.heading = heading
+        self.submitLabel = submitLabel
+        self.footnote = footnote
+        self.initialTitle = initialTitle
+        self.initialLocation = initialLocation
         self.initialStart = initialStart
         self.initialMinutes = initialMinutes
         self.availability = availability
         self.onSend = onSend
         self.onCancel = onCancel
+        _title = State(initialValue: initialTitle)
+        _location = State(initialValue: initialLocation)
         _start = State(initialValue: initialStart)
         _minutes = State(initialValue: initialMinutes)
     }
@@ -46,7 +65,7 @@ struct ProposeForm: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Propose a time").font(.title3.bold())
+                Text(heading).font(.title3.bold())
                 TextField("What's the plan? e.g. Dinner at Joe's", text: $title)
                     .textFieldStyle(.roundedBorder)
                     .focused($titleFocused)
@@ -63,13 +82,15 @@ struct ProposeForm: View {
                 HStack {
                     Button("Cancel", action: onCancel)
                     Spacer()
-                    Button("Send plan") { onSend(trimmedTitle, start, minutes, location) }
+                    Button(submitLabel) { onSend(trimmedTitle, start, minutes, location) }
                         .buttonStyle(.borderedProminent)
                         .disabled(trimmedTitle.isEmpty)
                 }
-                Text("You'll be marked as going, and it's added to your Google Calendar.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if let footnote {
+                    Text(footnote)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding()
         }
@@ -109,10 +130,26 @@ struct PlanView: View {
     let isAnswering: Bool
     let onAnswer: (PlanSummary.Response) -> Void
     let onBack: () -> Void
+    let onEdit: () -> Void
+
+    /// Group members can edit one-time plans here (repeating ones on the
+    /// website for now).
+    private var canEdit: Bool { plan.inGroup && !plan.cancelled && !plan.repeats }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    // Back to the chat's calendar, top left like other iPhone apps.
+                    Button(action: onBack) {
+                        Label("Calendar", systemImage: "chevron.left")
+                    }
+                    Spacer()
+                    if canEdit {
+                        Button("Edit", action: onEdit)
+                    }
+                }
+                .font(.body.weight(.medium))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(plan.groupName.uppercased())
                         .font(.caption)
@@ -150,10 +187,6 @@ struct PlanView: View {
                 }
 
                 people
-                if plan.inGroup {
-                    Button("Back to the calendar", action: onBack)
-                        .font(.subheadline)
-                }
             }
             .padding()
         }

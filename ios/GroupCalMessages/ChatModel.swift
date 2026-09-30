@@ -25,6 +25,8 @@ final class ChatModel {
         case proposing(Date, Int)
         /// A plan, opened from its bubble.
         case plan(PlanSummary)
+        /// Changing a plan's details.
+        case editing(PlanSummary)
         case problem(String)
     }
 
@@ -47,8 +49,8 @@ final class ChatModel {
     /// Answering Going / Can't make it on the plan screen.
     private(set) var isAnswering = false
 
-    /// Opens on the week; the Day | Week switch is under the calendar.
-    private(set) var span: Span = .week
+    /// Opens on the day; the Day | Week switch is under the calendar.
+    private(set) var span: Span = .day
     /// Days (day view) or weeks (week view) from now. Never negative: like
     /// the website, you can look ahead but not back.
     private(set) var offset = 0
@@ -282,6 +284,40 @@ final class ChatModel {
             // Opened from its bubble: update the bubble, so everyone sees
             // who's going. Sending in the bubble's session replaces it; if
             // Messages won't send right away, leave it in the message box.
+            if let planSession {
+                let message = planMessage(for: updated, session: planSession)
+                do { try await sendMessage(message) } catch { try await insertMessage(message) }
+            }
+        } catch {
+            screen = .problem(error.localizedDescription)
+        }
+    }
+
+    // MARK: Editing a plan
+
+    func beginEdit() {
+        guard case .plan(let plan) = screen else { return }
+        screen = .editing(plan)
+        // The keyboard only shows in the expanded (full-height) view.
+        requestStyle(.expanded)
+    }
+
+    func cancelEdit() {
+        guard case .editing(let plan) = screen else { return }
+        screen = .plan(plan)
+    }
+
+    /// Saves the new details (everyone's Google Calendar is updated on the
+    /// server) and, if it was opened from its bubble, updates the bubble.
+    func saveEdit(title: String, start: Date, durationMinutes: Int, location: String) async {
+        guard case .editing(let plan) = screen, let token = TokenStore.read() else { return }
+        screen = .working("Saving…")
+        do {
+            let updated = try await api.editPlan(
+                shareCode: plan.shareCode, title: title, start: start, durationMinutes: durationMinutes,
+                location: location, token: token
+            )
+            screen = .plan(updated)
             if let planSession {
                 let message = planMessage(for: updated, session: planSession)
                 do { try await sendMessage(message) } catch { try await insertMessage(message) }

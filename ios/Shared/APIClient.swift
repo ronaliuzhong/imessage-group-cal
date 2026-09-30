@@ -228,6 +228,26 @@ struct APIClient {
         return response.plan
     }
 
+    /// Edits a (one-time) plan. Everyone's Google Calendar is updated.
+    func editPlan(
+        shareCode: String, title: String, start: Date, durationMinutes: Int, location: String, token: String
+    ) async throws -> PlanSummary {
+        struct Body: Encodable {
+            let title: String
+            let start: String
+            let durationMinutes: Int
+            let location: String
+        }
+        let body = Body(
+            title: title, start: start.formatted(Date.ISO8601FormatStyle()),
+            durationMinutes: durationMinutes, location: location
+        )
+        var request = try postJSON("api/app/plans/\(shareCode)", body, token: token)
+        request.httpMethod = "PATCH"
+        let response: PlanResponse = try await send(request)
+        return response.plan
+    }
+
     func plan(shareCode: String, token: String) async throws -> PlanSummary {
         let response: PlanResponse = try await send(
             authorized(URLRequest(url: baseURL.appending(path: "api/app/plans/\(shareCode)")), token: token)

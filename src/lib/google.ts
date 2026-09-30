@@ -54,8 +54,9 @@ export const getGrantedScopes = cache(async (userId: string) => {
 
 // A valid access token plus what it's allowed to do. Wrapped in React's
 // cache() so that within one page load we look this up (and refresh it) at
-// most once per user, even if several functions need it.
-const getConnection = cache(async (userId: string) => {
+// most once per user, even if several functions need it. `forceRefresh` gets
+// a new token even if the saved one looks unexpired (see googleFetch).
+const getConnection = cache(async (userId: string, forceRefresh = false) => {
   const account = await prisma.account.findFirst({
     where: { userId, provider: "google" },
   });
@@ -67,7 +68,7 @@ const getConnection = cache(async (userId: string) => {
 
   // Reuse the current access token unless it expires within the next minute.
   const expiresAtMs = (account.expires_at ?? 0) * 1000;
-  if (account.access_token && expiresAtMs > Date.now() + 60_000) {
+  if (!forceRefresh && account.access_token && expiresAtMs > Date.now() + 60_000) {
     return { accessToken: decrypt(account.access_token), canListCalendars };
   }
 
@@ -103,11 +104,27 @@ const getConnection = cache(async (userId: string) => {
   return { accessToken: data.access_token as string, canListCalendars };
 });
 
+// Calls a Google API as this person. Google sometimes rejects a token that
+// hasn't reached its expiry time yet (e.g. after they signed in again
+// elsewhere); then get a fresh one and try once more, rather than silently
+// failing to update their calendar.
+async function googleFetch(
+  userId: string,
+  url: string | URL,
+  init: Omit<RequestInit, "headers"> & { headers?: Record<string, string> } = {},
+): Promise<Response> {
+  const send = (accessToken: string) =>
+    fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${accessToken}` } });
+  const res = await send((await getConnection(userId)).accessToken);
+  if (res.status !== 401) return res;
+  return send((await getConnection(userId, true)).accessToken);
+}
+
 // All of the user's calendars and whether each counts as busy time.
 // Returns null if they didn't grant the calendar-list permission, in which
 // case only their main calendar is used.
 export const listCalendars = cache(async (userId: string): Promise<UserCalendar[] | null> => {
-  const { accessToken, canListCalendars } = await getConnection(userId);
+  const { canListCalendars } = await getConnection(userId);
   if (!canListCalendars) return null;
 
   type Item = { id: string; summary?: string; summaryOverride?: string; accessRole: string; primary?: boolean };
@@ -117,10 +134,7 @@ export const listCalendars = cache(async (userId: string): Promise<UserCalendar[
     const url = new URL(`${CALENDAR_API}/users/me/calendarList`);
     url.searchParams.set("fields", "nextPageToken,items(id,summary,summaryOverride,accessRole,primary)");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
+    const res = await googleFetch(userId, url, { cache: "no-store" });
     if (res.status === 401) throw new CalendarNotConnectedError();
     if (!res.ok) throw new Error(`Google calendarList failed: ${res.status}`);
     const data: { items?: Item[]; nextPageToken?: string } = await res.json();
@@ -147,21 +161,15 @@ export async function getBusyBlocks(
   timeMin: Date,
   timeMax: Date,
 ): Promise<BusyBlock[]> {
-  const [{ accessToken }, calendars] = await Promise.all([
-    getConnection(userId),
-    listCalendars(userId),
-  ]);
+  const calendars = await listCalendars(userId);
   const calendarIds = calendars
     ? calendars.filter((c) => c.included).map((c) => c.id)
     : ["primary"];
   if (calendarIds.length === 0) return [];
 
-  const res = await fetch(`${CALENDAR_API}/freeBusy`, {
+  const res = await googleFetch(userId, `${CALENDAR_API}/freeBusy`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       timeMin: timeMin.toISOString(),
       timeMax: timeMax.toISOString(),
@@ -213,13 +221,13 @@ export type EventBody = {
 // Returns the ID of this person's "Group Cal" calendar, creating it the first
 // time. It's a separate calendar (not their main one) so it gets its own color
 // in Google Calendar and can be hidden or deleted in one go.
-async function getOrCreateAppCalendar(userId: string, accessToken: string): Promise<string> {
+async function getOrCreateAppCalendar(userId: string): Promise<string> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { appCalendarId: true } });
   if (user.appCalendarId) return user.appCalendarId;
 
-  const res = await fetch(`${CALENDAR_API}/calendars`, {
+  const res = await googleFetch(userId, `${CALENDAR_API}/calendars`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ summary: "Group Cal", description: "Plans you're going to, added by Group Cal." }),
   });
   if (!res.ok) throw new Error(`Couldn't create Group Cal calendar: ${res.status}`);
@@ -230,17 +238,16 @@ async function getOrCreateAppCalendar(userId: string, accessToken: string): Prom
 
 // Calls the Calendar API for an event on this person's Group Cal calendar.
 // Returns null if they haven't granted the permission or have no calendar yet.
-async function eventRequest(userId: string, path: string, init: RequestInit): Promise<Response | null> {
+async function eventRequest(userId: string, path: string, init: { method: string; body?: string }): Promise<Response | null> {
   if (!(await getGrantedScopes(userId)).appCalendar) return null;
   const { appCalendarId } = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: { appCalendarId: true },
   });
   if (!appCalendarId) return null;
-  const { accessToken } = await getConnection(userId);
-  return fetch(`${CALENDAR_API}/calendars/${encodeURIComponent(appCalendarId)}/events${path}`, {
+  return googleFetch(userId, `${CALENDAR_API}/calendars/${encodeURIComponent(appCalendarId)}/events${path}`, {
     ...init,
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
@@ -248,20 +255,19 @@ async function eventRequest(userId: string, path: string, init: RequestInit): Pr
 export async function insertEvent(userId: string, body: EventBody): Promise<string | null> {
   try {
     if (!(await getGrantedScopes(userId)).appCalendar) return null;
-    const { accessToken } = await getConnection(userId);
     const insert = (calendarId: string) =>
-      fetch(`${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`, {
+      googleFetch(userId, `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 
-    let res = await insert(await getOrCreateAppCalendar(userId, accessToken));
+    let res = await insert(await getOrCreateAppCalendar(userId));
     // 404 = they deleted the Group Cal calendar in Google Calendar. Forget it,
     // make a new one, and try once more.
     if (res.status === 404) {
       await prisma.user.update({ where: { id: userId }, data: { appCalendarId: null } });
-      res = await insert(await getOrCreateAppCalendar(userId, accessToken));
+      res = await insert(await getOrCreateAppCalendar(userId));
     }
     if (!res.ok) throw new Error(`events.insert failed: ${res.status}`);
     return ((await res.json()) as { id: string }).id;

@@ -74,7 +74,23 @@ struct MessagesRootView: View {
                 plan: plan,
                 isAnswering: model.isAnswering,
                 onAnswer: { response in Task { await model.answer(response) } },
-                onBack: { Task { await model.backToCalendar() } }
+                onBack: { Task { await model.backToCalendar() } },
+                onEdit: { model.beginEdit() }
+            )
+        case .editing(let plan):
+            ProposeForm(
+                heading: "Edit plan",
+                submitLabel: "Save",
+                footnote: "Everyone who's going gets the change in their Google Calendar.",
+                initialTitle: plan.title,
+                initialLocation: plan.location ?? "",
+                initialStart: plan.start,
+                initialMinutes: Int(plan.end.timeIntervalSince(plan.start) / 60),
+                availability: model.lastAvailability,
+                onSend: { title, start, minutes, location in
+                    Task { await model.saveEdit(title: title, start: start, durationMinutes: minutes, location: location) }
+                },
+                onCancel: { model.cancelEdit() }
             )
         case .problem(let message):
             Problem(title: "Something went wrong", message: message) {
