@@ -77,8 +77,72 @@ struct PlanSummary: Decodable, Equatable, Sendable {
     let going: [Person]
     let notGoing: [Person]
     let myResponse: Response?
-    /// Goes behind the plan bubble (the website's plan page).
+    /// Goes behind the plan bubble (the website's plan page, on this date).
     let url: URL
+    /// Which date of a repeating plan this is (its start as first planned).
+    let originalStart: Date
+    /// The plan's first date (where "this and following" is the same as all).
+    let isFirstDate: Bool
+    /// e.g. "Weekly on Thursday · 5 times"; nil if it doesn't repeat.
+    let repeatLabel: String?
+    /// How it repeats, for editing; nil if it doesn't.
+    let `repeat`: RepeatRule?
+}
+
+/// For repeating plans: which dates an edit applies to.
+enum EditScope: String, Sendable {
+    /// Just the date being viewed.
+    case this
+    /// It and every later date (continues as a new plan).
+    case following
+    case all
+}
+
+/// A plan being proposed or edited.
+struct PlanDraft: Equatable, Sendable {
+    var title: String
+    var start: Date
+    var durationMinutes: Int
+    var location: String
+    var `repeat`: RepeatRule?
+}
+
+/// A plan's details as the server expects them.
+private struct PlanBody: Encodable {
+    let title: String
+    let start: String
+    let durationMinutes: Int
+    let location: String
+    let timeZone: String
+    /// Always sent (null = doesn't repeat), so an edit can stop a repeat.
+    let `repeat`: RepeatRule?
+    var scope: String?
+    var occurrence: String?
+
+    init(_ draft: PlanDraft) {
+        title = draft.title
+        start = draft.start.formatted(Date.ISO8601FormatStyle())
+        durationMinutes = draft.durationMinutes
+        location = draft.location
+        timeZone = TimeZone.current.identifier
+        self.repeat = draft.repeat
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case title, start, durationMinutes, location, timeZone, `repeat`, scope, occurrence
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(title, forKey: .title)
+        try c.encode(start, forKey: .start)
+        try c.encode(durationMinutes, forKey: .durationMinutes)
+        try c.encode(location, forKey: .location)
+        try c.encode(timeZone, forKey: .timeZone)
+        try c.encode(self.repeat, forKey: .repeat) // null when it doesn't repeat
+        try c.encodeIfPresent(scope, forKey: .scope)
+        try c.encodeIfPresent(occurrence, forKey: .occurrence)
+    }
 }
 
 private struct PlanResponse: Decodable {
@@ -114,6 +178,8 @@ struct Availability: Decodable, Equatable, Sendable {
         /// Unique per date: "<plan id>:<date>".
         let id: String
         let shareCode: String
+        /// Which date of the plan this is (its start as first planned).
+        let originalStart: Date
         let title: String
         let start: Date
         let end: Date
@@ -205,61 +271,57 @@ struct APIClient {
         return try await send(authorized(URLRequest(url: url), token: token))
     }
 
-    /// Proposes a (one-time) plan in a group. You're marked as going and it's
-    /// added to your Google Calendar.
-    func proposePlan(
-        groupId: String, title: String, start: Date, durationMinutes: Int, location: String, token: String
-    ) async throws -> PlanSummary {
-        struct Body: Encodable {
-            let title: String
-            let start: String
-            let durationMinutes: Int
-            let location: String
-            let timeZone: String
-        }
-        let body = Body(
-            title: title,
-            start: start.formatted(Date.ISO8601FormatStyle()),
-            durationMinutes: durationMinutes,
-            location: location,
-            timeZone: TimeZone.current.identifier
+    /// Proposes a plan in a group (optionally repeating). You're marked as
+    /// going and it's added to your Google Calendar.
+    func proposePlan(groupId: String, _ draft: PlanDraft, token: String) async throws -> PlanSummary {
+        let response: PlanResponse = try await send(
+            postJSON("api/app/groups/\(groupId)/plans", PlanBody(draft), token: token)
         )
-        let response: PlanResponse = try await send(postJSON("api/app/groups/\(groupId)/plans", body, token: token))
         return response.plan
     }
 
-    /// Edits a (one-time) plan. Everyone's Google Calendar is updated.
+    /// Edits a plan. For repeating plans `scope` says which dates and
+    /// `occurrence` is the date being edited. Everyone's Google Calendar is
+    /// updated. ("This and following" comes back as a new plan.)
     func editPlan(
-        shareCode: String, title: String, start: Date, durationMinutes: Int, location: String, token: String
+        shareCode: String, _ draft: PlanDraft, scope: EditScope = .all, occurrence: Date? = nil, token: String
     ) async throws -> PlanSummary {
-        struct Body: Encodable {
-            let title: String
-            let start: String
-            let durationMinutes: Int
-            let location: String
-        }
-        let body = Body(
-            title: title, start: start.formatted(Date.ISO8601FormatStyle()),
-            durationMinutes: durationMinutes, location: location
-        )
+        var body = PlanBody(draft)
+        body.scope = scope.rawValue
+        body.occurrence = occurrence?.formatted(Date.ISO8601FormatStyle())
         var request = try postJSON("api/app/plans/\(shareCode)", body, token: token)
         request.httpMethod = "PATCH"
         let response: PlanResponse = try await send(request)
         return response.plan
     }
 
-    func plan(shareCode: String, token: String) async throws -> PlanSummary {
-        let response: PlanResponse = try await send(
-            authorized(URLRequest(url: baseURL.appending(path: "api/app/plans/\(shareCode)")), token: token)
-        )
+    /// A plan, on a given date if it repeats (else its next date).
+    func plan(shareCode: String, at date: Date? = nil, token: String) async throws -> PlanSummary {
+        var url = baseURL.appending(path: "api/app/plans/\(shareCode)")
+        if let date {
+            url.append(queryItems: [URLQueryItem(name: "at", value: date.formatted(Date.ISO8601FormatStyle()))])
+        }
+        let response: PlanResponse = try await send(authorized(URLRequest(url: url), token: token))
         return response.plan
     }
 
-    /// Going / Can't make it. Updates your Google Calendar to match.
-    func answer(shareCode: String, _ answer: PlanSummary.Response, token: String) async throws -> PlanSummary {
-        let response: PlanResponse = try await send(
-            postJSON("api/app/plans/\(shareCode)/rsvp", ["response": answer.rawValue], token: token)
+    /// Going / Can't make it. For repeating plans: `justThisDate` answers only
+    /// `occurrence`, otherwise every date. Updates your Google Calendar.
+    func answer(
+        shareCode: String, _ answer: PlanSummary.Response, occurrence: Date? = nil, justThisDate: Bool = false,
+        token: String
+    ) async throws -> PlanSummary {
+        struct Body: Encodable {
+            let response: String
+            let occurrence: String?
+            let scope: String
+        }
+        let body = Body(
+            response: answer.rawValue,
+            occurrence: occurrence?.formatted(Date.ISO8601FormatStyle()),
+            scope: justThisDate ? "this" : "all"
         )
+        let response: PlanResponse = try await send(postJSON("api/app/plans/\(shareCode)/rsvp", body, token: token))
         return response.plan
     }
 

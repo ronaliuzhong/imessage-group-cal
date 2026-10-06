@@ -19,7 +19,7 @@ struct GlanceView: View {
     /// length in minutes), or (nil) the next hour.
     let onPropose: (Date?, Int?) -> Void
     /// Tapping a plan (on the calendar or in "Upcoming plans").
-    let onOpenPlan: (String) -> Void
+    let onOpenPlan: (_ shareCode: String, _ date: Date) -> Void
 
     var body: some View {
         GeometryReader { panel in
@@ -55,7 +55,7 @@ struct GlanceContent: View {
     let onInvite: () -> Void
     let onRefresh: () -> Void
     let onPropose: (Date?, Int?) -> Void
-    let onOpenPlan: (String) -> Void
+    let onOpenPlan: (_ shareCode: String, _ date: Date) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -160,13 +160,13 @@ private struct FreeNowSection: View {
 
 private struct UpcomingSection: View {
     let plans: [Availability.Plan]
-    let onOpenPlan: (String) -> Void
+    let onOpenPlan: (_ shareCode: String, _ date: Date) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Upcoming plans").font(.headline)
             ForEach(plans) { plan in
-                Button { onOpenPlan(plan.shareCode) } label: {
+                Button { onOpenPlan(plan.shareCode, plan.originalStart) } label: {
                     HStack(alignment: .top, spacing: 10) {
                         Circle().fill(Color(hex: plan.color.hex)).frame(width: 10, height: 10).padding(.top, 5)
                         VStack(alignment: .leading, spacing: 2) {
@@ -320,7 +320,7 @@ private struct OverlapGrid: View {
     /// Holding and dragging proposes that range.
     let onPickRange: (Date, Date) -> Void
     /// Tapping a plan opens it.
-    let onOpenPlan: (String) -> Void
+    let onOpenPlan: (_ shareCode: String, _ date: Date) -> Void
 
     /// A range being held-and-dragged on one day column.
     private struct DragPick: Equatable {
@@ -488,7 +488,7 @@ private struct DayColumn: View {
     let compact: Bool
     /// The range being held-and-dragged on this day, in minutes into the day.
     let dragRange: ClosedRange<Int>?
-    let onOpenPlan: (String) -> Void
+    let onOpenPlan: (_ shareCode: String, _ date: Date) -> Void
 
     var body: some View {
         let calendar = Calendar.current
@@ -575,7 +575,7 @@ private struct DayColumn: View {
             .padding(.horizontal, compact ? 1 : 3)
             .frame(height: height)
             .contentShape(shape)
-            .onTapGesture { onOpenPlan(plan.shareCode) }
+            .onTapGesture { onOpenPlan(plan.shareCode, plan.originalStart) }
             .accessibilityAddTraits(.isButton)
             .offset(y: blockTop)
             .frame(maxHeight: .infinity, alignment: .top)

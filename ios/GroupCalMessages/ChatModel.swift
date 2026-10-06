@@ -84,6 +84,8 @@ final class ChatModel {
     private var pendingInviteCode: String?
     /// Set when Group Cal was opened by tapping a plan bubble.
     private var pendingPlanCode: String?
+    /// Which date to open a repeating plan on (from its bubble or the calendar).
+    private var pendingPlanDate: Date?
     /// The tapped plan bubble's session: sending a message in the same
     /// session replaces the bubble instead of adding a new one.
     private var planSession: MSSession?
@@ -118,6 +120,7 @@ final class ChatModel {
         }
         if let code = Self.planCode(in: url) {
             pendingPlanCode = code
+            pendingPlanDate = Self.planDate(in: url)
             planSession = message.session
             return true
         }
@@ -142,8 +145,10 @@ final class ChatModel {
         do {
             if let code = pendingPlanCode {
                 pendingPlanCode = nil
+                let date = pendingPlanDate
+                pendingPlanDate = nil
                 screen = .working("Opening plan…")
-                let plan = try await api.plan(shareCode: code, token: token)
+                let plan = try await api.plan(shareCode: code, at: date, token: token)
                 // The plan's group is this chat's group, if they're in it.
                 if plan.inGroup { remember(plan.groupId) }
                 screen = .plan(plan)
@@ -254,14 +259,11 @@ final class ChatModel {
 
     /// Creates the plan (you're going; it's added to your Google Calendar)
     /// and puts its bubble in the message box for you to send.
-    func sendProposal(title: String, start: Date, durationMinutes: Int, location: String) async {
+    func sendProposal(_ draft: PlanDraft) async {
         guard let token = TokenStore.read(), let groupId = lastAvailability?.group.id else { return }
         screen = .working("Creating plan…")
         do {
-            let plan = try await api.proposePlan(
-                groupId: groupId, title: title, start: start, durationMinutes: durationMinutes,
-                location: location, token: token
-            )
+            let plan = try await api.proposePlan(groupId: groupId, draft, token: token)
             try await insertMessage(planMessage(for: plan, session: MSSession()))
             requestStyle(.compact)
             try await showGlance(groupId: groupId, token: token)
@@ -274,12 +276,17 @@ final class ChatModel {
 
     /// Going / Can't make it. Updates their Google Calendar (on the server)
     /// and the bubble in the chat, so everyone sees who's going.
-    func answer(_ response: PlanSummary.Response) async {
+    /// For repeating plans `justThisDate` answers only the date on screen,
+    /// otherwise every date ("all of them").
+    func answer(_ response: PlanSummary.Response, justThisDate: Bool = false) async {
         guard case .plan(let current) = screen, let token = TokenStore.read() else { return }
         isAnswering = true
         defer { isAnswering = false }
         do {
-            let updated = try await api.answer(shareCode: current.shareCode, response, token: token)
+            let updated = try await api.answer(
+                shareCode: current.shareCode, response, occurrence: current.originalStart,
+                justThisDate: justThisDate, token: token
+            )
             screen = .plan(updated)
             // Opened from its bubble: update the bubble, so everyone sees
             // who's going. Sending in the bubble's session replaces it; if
@@ -309,13 +316,12 @@ final class ChatModel {
 
     /// Saves the new details (everyone's Google Calendar is updated on the
     /// server) and, if it was opened from its bubble, updates the bubble.
-    func saveEdit(title: String, start: Date, durationMinutes: Int, location: String) async {
+    func saveEdit(_ draft: PlanDraft, scope: EditScope = .all) async {
         guard case .editing(let plan) = screen, let token = TokenStore.read() else { return }
         screen = .working("Saving…")
         do {
             let updated = try await api.editPlan(
-                shareCode: plan.shareCode, title: title, start: start, durationMinutes: durationMinutes,
-                location: location, token: token
+                shareCode: plan.shareCode, draft, scope: scope, occurrence: plan.originalStart, token: token
             )
             screen = .plan(updated)
             if let planSession {
@@ -329,8 +335,9 @@ final class ChatModel {
 
     /// Tapping a plan on the calendar or in "Upcoming plans". There's no
     /// bubble to update, so answering there only changes the plan itself.
-    func openPlan(shareCode: String) async {
+    func openPlan(shareCode: String, date: Date? = nil) async {
         pendingPlanCode = shareCode
+        pendingPlanDate = date
         planSession = nil
         requestStyle(.expanded)
         await load()
@@ -348,7 +355,8 @@ final class ChatModel {
     private func planMessage(for plan: PlanSummary, session: MSSession) -> MSMessage {
         let layout = MSMessageTemplateLayout()
         layout.caption = plan.title
-        layout.subcaption = PlanTime.describe(plan.start, plan.end)
+        layout.subcaption = plan.repeatLabel.map { "\(PlanTime.describe(plan.start, plan.end)) · ↻ \($0)" }
+            ?? PlanTime.describe(plan.start, plan.end)
         layout.trailingSubcaption = plan.going.count == 1 ? "1 going" : "\(plan.going.count) going"
         let message = MSMessage(session: session)
         message.layout = layout
@@ -433,6 +441,16 @@ final class ChatModel {
     }
 
     /// The share code in a plan link: https://…/p/<code>.
+    /// The date in a plan link (repeating plans): …/p/<code>?at=<ISO date>.
+    static func planDate(in url: URL) -> Date? {
+        guard let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "at" })?.value
+        else { return nil }
+        // The server writes times like "2026-10-01T23:00:00.000Z".
+        let withFraction = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        return (try? withFraction.parse(value)) ?? (try? Date.ISO8601FormatStyle().parse(value))
+    }
+
     static func planCode(in url: URL) -> String? {
         let parts = url.pathComponents
         return parts.count == 3 && parts[1] == "p" ? parts[2] : nil

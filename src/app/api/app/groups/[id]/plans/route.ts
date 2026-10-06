@@ -1,9 +1,10 @@
-import { jsonBody, jsonError, planSummary, withAppUser } from "@/lib/app-api";
+import { jsonBody, jsonError, planSummary, repeatFromBody, withAppUser } from "@/lib/app-api";
 import { createPlanFor } from "@/lib/plan-writes";
 
 // POST: propose a plan from the iMessage extension. Body:
-// { "title", "start" (ISO time), "durationMinutes", "location"?, "timeZone" }
-// → { "plan": { ... } } (see planSummary). Plans made here don't repeat.
+// { "title", "start" (ISO time), "durationMinutes", "location"?, "timeZone",
+//   "repeat"? (like the website's: { freq, interval, weekdays, ends,
+//   untilDate, count }) } → { "plan": { ... } } (see planSummary).
 export async function POST(request: Request, ctx: RouteContext<"/api/app/groups/[id]/plans">) {
   return withAppUser(request, async (user) => {
     const { id } = await ctx.params;
@@ -17,7 +18,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/app/groups/
       location: String(body.location ?? ""),
       notes: String(body.notes ?? ""),
       timeZone: String(body.timeZone ?? ""),
-      repeat: null,
+      repeat: repeatFromBody(body.repeat),
     });
     if ("error" in result) {
       const status = result.error === "You're not in this group." ? 404 : 400;

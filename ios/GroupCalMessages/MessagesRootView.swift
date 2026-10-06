@@ -57,23 +57,21 @@ struct MessagesRootView: View {
                 onInvite: { Task { await model.sendInvite(for: availability.group) } },
                 onRefresh: { Task { await model.load() } },
                 onPropose: { start, minutes in model.beginProposal(at: start, minutes: minutes) },
-                onOpenPlan: { code in Task { await model.openPlan(shareCode: code) } }
+                onOpenPlan: { code, date in Task { await model.openPlan(shareCode: code, date: date) } }
             )
         case .proposing(let start, let minutes):
             ProposeForm(
                 initialStart: start,
                 initialMinutes: minutes,
                 availability: model.lastAvailability,
-                onSend: { title, start, minutes, location in
-                    Task { await model.sendProposal(title: title, start: start, durationMinutes: minutes, location: location) }
-                },
+                onSend: { draft, _ in Task { await model.sendProposal(draft) } },
                 onCancel: { model.cancelProposal() }
             )
         case .plan(let plan):
             PlanView(
                 plan: plan,
                 isAnswering: model.isAnswering,
-                onAnswer: { response in Task { await model.answer(response) } },
+                onAnswer: { response, justThisDate in Task { await model.answer(response, justThisDate: justThisDate) } },
                 onBack: { Task { await model.backToCalendar() } },
                 onEdit: { model.beginEdit() }
             )
@@ -86,10 +84,10 @@ struct MessagesRootView: View {
                 initialLocation: plan.location ?? "",
                 initialStart: plan.start,
                 initialMinutes: Int(plan.end.timeIntervalSince(plan.start) / 60),
+                initialRepeat: plan.repeat,
+                repeatingEdit: plan.repeats ? .init(isFirstDate: plan.isFirstDate) : nil,
                 availability: model.lastAvailability,
-                onSend: { title, start, minutes, location in
-                    Task { await model.saveEdit(title: title, start: start, durationMinutes: minutes, location: location) }
-                },
+                onSend: { draft, scope in Task { await model.saveEdit(draft, scope: scope) } },
                 onCancel: { model.cancelEdit() }
             )
         case .problem(let message):

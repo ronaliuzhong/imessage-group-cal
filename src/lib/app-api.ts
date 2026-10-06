@@ -1,5 +1,8 @@
 import { appUserFrom } from "@/lib/app-auth";
 import { prisma } from "@/lib/db";
+import type { RepeatInput } from "@/lib/plan-input";
+import { occurrenceToShow, responseFor, responsesFor, ruleOf } from "@/lib/plan-occurrences";
+import { repeatLabel } from "@/lib/recurrence";
 import { siteOrigin } from "@/lib/site";
 
 // Helpers for the iPhone app's endpoints (src/app/api/app/). They answer in
@@ -26,44 +29,89 @@ export async function jsonBody(request: Request): Promise<Record<string, unknown
 
 // What the app shows for a plan (and on its bubble), from `viewerId`'s side,
 // or null if there's no such plan. Like the website, anyone signed in who has
-// the plan's link can see it. Repeating plans are answered on the website, so
-// for those `going` counts the "all of them" answers only.
-export async function planSummary(shareCode: string, viewerId: string) {
+// the plan's link can see it. For repeating plans it describes one date: `at`
+// (its original start) if that's a real date, else the next one coming up,
+// with that date's details, answers and the viewer's answer for it.
+export async function planSummary(shareCode: string, viewerId: string, at?: Date | null) {
+  const user = { select: { id: true, name: true, email: true } };
   const plan = await prisma.plan.findUnique({
     where: { shareCode },
     include: {
       group: { select: { id: true, name: true, members: { select: { userId: true } } } },
-      rsvps: { include: { user: { select: { id: true, name: true, email: true } } } },
+      exceptions: true,
+      rsvps: { include: { user } },
+      occurrenceRsvps: { include: { user } },
     },
   });
   if (!plan) return null;
 
-  const person = (u: { id: string; name: string | null; email: string }) => ({
+  const shown = occurrenceToShow(plan, plan.exceptions, at ?? null);
+  const { going, notGoing } = responsesFor(shown.originalStart, plan.rsvps, plan.occurrenceRsvps);
+  const person = ({ user: u }: { user: { id: string; name: string | null; email: string } }) => ({
     id: u.id,
     name: u.name ?? u.email,
     isYou: u.id === viewerId,
   });
-  const answered = (response: string) => plan.rsvps.filter((r) => r.response === response).map((r) => person(r.user));
+  const repeats = plan.repeatFreq !== null;
+  const originalStart = shown.originalStart.toISOString();
   return {
     id: plan.id,
     shareCode: plan.shareCode,
-    title: plan.title,
-    start: plan.start.toISOString(),
-    end: plan.end.toISOString(),
-    location: plan.location,
-    notes: plan.notes,
+    title: shown.title,
+    start: shown.start.toISOString(),
+    end: shown.end.toISOString(),
+    location: shown.location,
+    notes: shown.notes,
     groupId: plan.group.id,
     groupName: plan.group.name,
     inGroup: plan.group.members.some((m) => m.userId === viewerId),
-    repeats: plan.repeatFreq !== null,
+    repeats,
     cancelled: plan.cancelledAt !== null,
-    going: answered("GOING"),
-    notGoing: answered("NOT_GOING"),
-    myResponse: plan.rsvps.find((r) => r.userId === viewerId)?.response ?? null,
+    going: going.map(person),
+    notGoing: notGoing.map(person),
+    myResponse: responseFor(viewerId, shown.originalStart, plan.rsvps, plan.occurrenceRsvps),
+    // Which date this is, and whether it's the plan's first (where "this and
+    // following" means the same as "all").
+    originalStart,
+    isFirstDate: shown.originalStart.getTime() === plan.start.getTime(),
+    // e.g. "Weekly on Thursday · 6 times"; and the settings, for editing.
+    repeatLabel: repeatLabel(ruleOf(plan)),
+    repeat: repeats
+      ? {
+          freq: plan.repeatFreq,
+          interval: plan.repeatInterval,
+          weekdays: plan.repeatWeekdays,
+          ends: plan.repeatCount ? "after" : plan.repeatUntil ? "on" : "never",
+          untilDate: plan.repeatUntil ?? "",
+          count: plan.repeatCount ?? 10,
+        }
+      : null,
     // Goes behind the plan bubble: the extension recognizes it, and anyone
-    // without the app gets the website's plan page.
-    url: `${await siteOrigin()}/p/${plan.shareCode}`,
+    // without the app gets the website's plan page (on this date).
+    url: `${await siteOrigin()}/p/${plan.shareCode}${repeats ? `?at=${encodeURIComponent(originalStart)}` : ""}`,
   };
+}
+
+// A repeat setting from an app request, or null. parsePlanInput checks it
+// properly; this only makes sure it has the right shape.
+export function repeatFromBody(value: unknown): RepeatInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const r = value as Record<string, unknown>;
+  return {
+    freq: String(r.freq ?? "") as RepeatInput["freq"],
+    interval: Number(r.interval),
+    weekdays: Array.isArray(r.weekdays) ? r.weekdays.map(Number) : [],
+    ends: String(r.ends ?? "never") as RepeatInput["ends"],
+    untilDate: String(r.untilDate ?? ""),
+    count: Number(r.count),
+  };
+}
+
+// A date from an app request ("which date of a repeating plan"), or null.
+export function dateFromValue(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 // What the app needs to know about a group. `joinUrl` goes behind the invite

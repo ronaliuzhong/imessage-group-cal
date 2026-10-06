@@ -15,6 +15,7 @@ const UPCOMING_COUNT = 5;
 const appPlan = (p: CalendarPlan) => ({
   id: p.id,
   shareCode: p.shareCode,
+  originalStart: p.originalStart,
   title: p.title,
   start: p.start,
   end: p.end,

@@ -1,11 +1,12 @@
-import { jsonBody, jsonError, planSummary, withAppUser } from "@/lib/app-api";
+import { dateFromValue, jsonBody, jsonError, planSummary, withAppUser } from "@/lib/app-api";
 import { prisma } from "@/lib/db";
 import { setRsvpFor } from "@/lib/plan-writes";
 
 // POST: Going / Can't make it from the plan bubble. Body:
-// { "response": "GOING" | "NOT_GOING" } → { "plan": { ... } }, updated.
-// Adds the plan to (or removes it from) their Google Calendar, like the
-// website. Repeating plans are answered on the website.
+// { "response": "GOING" | "NOT_GOING" }, plus for repeating plans
+// "occurrence" (the date shown) and "scope": "this" (just that date) or
+// "all" (every date). → { "plan": { ... } }, updated. Adds the plan to (or
+// removes it from) their Google Calendar, like the website.
 export async function POST(request: Request, ctx: RouteContext<"/api/app/plans/[code]/rsvp">) {
   return withAppUser(request, async (user) => {
     const { code } = await ctx.params;
@@ -18,9 +19,10 @@ export async function POST(request: Request, ctx: RouteContext<"/api/app/plans/[
     const plan = await prisma.plan.findUnique({ where: { shareCode: code } });
     if (!plan) return jsonError("This plan doesn't exist anymore.", 404);
     if (plan.cancelledAt) return jsonError("This plan was cancelled.", 409);
-    if (plan.repeatFreq) return jsonError("Repeating plans can be answered on the Group Cal website.", 409);
 
-    await setRsvpFor(user.id, plan.id, response);
-    return Response.json({ plan: await planSummary(code, user.id) });
+    const occurrence = dateFromValue(body?.occurrence);
+    const justThisOne = plan.repeatFreq !== null && body?.scope === "this" && occurrence !== null;
+    await setRsvpFor(user.id, plan.id, response, justThisOne ? occurrence.toISOString() : null);
+    return Response.json({ plan: await planSummary(code, user.id, occurrence) });
   });
 }
