@@ -1,6 +1,6 @@
-# Welcome to Group Cal
+# Welcome to Coucal
 
-Group Cal shows a group of friends when they're all free, using everyone's
+Coucal shows a group of friends when they're all free, using everyone's
 Google Calendar, and lets them propose plans in that free time. The group
 chat is the social graph: whoever is in a group is who we show availability
 for.
@@ -22,7 +22,7 @@ the project owner first.
   anyone's own events. The Google permissions are `calendar.freebusy`,
   `calendar.calendarlist.readonly` (so every calendar someone owns counts;
   calendar names are shown only to their owner) and `calendar.app.created`
-  (we write plans only into a "Group Cal" calendar that the app creates).
+  (we write plans only into a "Coucal" calendar that the app creates).
 - **No friend system.** No friend lists, profiles or "add friends" flow.
   That's out of scope, not just postponed.
 - **No emails or texts sent by the app.** People paste group and plan links
@@ -109,7 +109,7 @@ npm run lint        # ESLint
 | `src/components/week-calendar.tsx` | The calendar grid (free/busy heat map, plans, click/drag to pick a time) |
 | `src/lib/availability.ts` | Overlap math: who's free when |
 | `src/lib/google.ts` | Talking to Google Calendar |
-| `src/lib/calendar-sync.ts` | Keeping each person's "Group Cal" calendar in step with their plans |
+| `src/lib/calendar-sync.ts` | Keeping each person's "Coucal" calendar in step with their plans |
 | `src/lib/recurrence.ts`, `plan-occurrences.ts`, `edit-all.ts` | Repeating plans and "this / following / all" edits |
 | `src/lib/app-auth.ts`, `src/app/app-auth/`, `src/app/api/app/` | How the iPhone app signs in, and the endpoints it calls |
 | `prisma/schema.prisma` | The database tables |
@@ -140,9 +140,9 @@ npm run lint        # ESLint
   doesn't need it.
 - **Don't keep the project in an iCloud-synced folder** (like Desktop or
   Documents). iCloud creates "… 2" duplicate files that break the build.
-- **Your first "Going" creates a "Group Cal" calendar** in your Google
+- **Your first "Going" creates a "Coucal" calendar** in your Google
   Calendar. The live site and your local copy use different databases, so
-  you may end up with two. Renaming the local one "Group Cal (test)" helps.
+  you may end up with two. Renaming the local one "Coucal (test)" helps.
 
 ## The iPhone app (`ios/`)
 

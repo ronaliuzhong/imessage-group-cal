@@ -12,7 +12,7 @@ export type PlanForCalendar = PlanDetails & {
 // The event description, shared with the events we add to Google Calendar
 // automatically: the notes first, then which group and a link.
 export function planDescription(plan: { notes: string | null; groupName: string; url: string }): string {
-  const footer = `${plan.groupName} · Planned with Group Cal\n${plan.url}`;
+  const footer = `${plan.groupName} · Planned with Coucal\n${plan.url}`;
   return plan.notes ? `${plan.notes}\n\n${footer}` : footer;
 }
 
@@ -106,7 +106,7 @@ export function icsFile(plan: PlanForCalendar, exceptions: ExceptionRow[] = [], 
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Group Cal//EN",
+    "PRODID:-//Coucal//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     ...eventLines(plan, [

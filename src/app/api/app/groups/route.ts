@@ -2,7 +2,7 @@ import { groupSummary, jsonBody, jsonError, withAppUser } from "@/lib/app-api";
 import { prisma } from "@/lib/db";
 import { createAutoNamedGroupFor, createGroupFor } from "@/lib/groups";
 
-// GET: your groups, most recently joined first, so a chat Group Cal doesn't
+// GET: your groups, most recently joined first, so a chat Coucal doesn't
 // recognize can be linked to one. → { "groups": [{ ...summary, memberCount }] }
 export async function GET(request: Request) {
   return withAppUser(request, async (user) => {
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   });
 }
 
-// POST: "Start Group Cal in this chat". Body: { "name": "Roommates" }, or
+// POST: "Start Coucal in this chat". Body: { "name": "Roommates" }, or
 // { "autoName": true } for one-on-one chats (named from members' first names).
 // → { "group": { id, name, autoNamed, inviteCode, joinUrl } }
 export async function POST(request: Request) {

@@ -3,11 +3,11 @@ import Messages
 import Observation
 import SwiftUI
 
-/// What Group Cal shows in one chat, and the actions behind it.
+/// What Coucal shows in one chat, and the actions behind it.
 ///
-/// A chat becomes a group when someone taps "Start Group Cal in this chat":
+/// A chat becomes a group when someone taps "Start Coucal in this chat":
 /// that creates the group and puts an invite bubble in the chat. Everyone else
-/// joins by tapping the bubble. After that, opening Group Cal in the chat
+/// joins by tapping the bubble. After that, opening Coucal in the chat
 /// shows its group at a glance, where anyone can propose a plan: that sends a
 /// plan bubble people answer (Going / Can't make it) right in the chat.
 @MainActor
@@ -41,7 +41,7 @@ final class ChatModel {
     private(set) var screen: Screen = .loading
     /// Everyone in the chat, including you.
     private(set) var participantCount = 1
-    /// Your groups, offered on the start screen so a chat Group Cal doesn't
+    /// Your groups, offered on the start screen so a chat Coucal doesn't
     /// recognize can be linked instead of starting a duplicate.
     private(set) var existingGroups: [GroupListItem] = []
     /// The calendar last shown, for "Sam is busy then" while proposing.
@@ -80,9 +80,9 @@ final class ChatModel {
 
     private let api = APIClient()
     private var conversationKey: String?
-    /// Set when Group Cal was opened by tapping an invite bubble.
+    /// Set when Coucal was opened by tapping an invite bubble.
     private var pendingInviteCode: String?
-    /// Set when Group Cal was opened by tapping a plan bubble.
+    /// Set when Coucal was opened by tapping a plan bubble.
     private var pendingPlanCode: String?
     /// Which date to open a repeating plan on (from its bubble or the calendar).
     private var pendingPlanDate: Date?
@@ -92,7 +92,7 @@ final class ChatModel {
 
     // MARK: Opening
 
-    /// Group Cal opened in a chat (possibly by tapping a bubble).
+    /// Coucal opened in a chat (possibly by tapping a bubble).
     func activate(in conversation: MSConversation) async {
         participantCount = conversation.remoteParticipantIdentifiers.count + 1
         conversationKey = ConversationStore.key(for: conversation)
@@ -103,7 +103,7 @@ final class ChatModel {
         await load()
     }
 
-    /// A bubble was tapped while Group Cal was already open.
+    /// A bubble was tapped while Coucal was already open.
     func selected(_ message: MSMessage) async {
         guard noteBubble(message) else { return }
         await load()
@@ -370,9 +370,9 @@ final class ChatModel {
     private func insertInvite(for group: GroupSummary) async throws {
         let layout = MSMessageTemplateLayout()
         // An automatic name ("Rona's chat") would read oddly here.
-        let caption = group.autoNamed ? "See when we're both free" : "Join \(group.name) on Group Cal"
+        let caption = group.autoNamed ? "See when we're both free" : "Join \(group.name) on Coucal"
         layout.caption = caption
-        layout.subcaption = group.autoNamed ? "Tap to join on Group Cal" : "See when everyone's free"
+        layout.subcaption = group.autoNamed ? "Tap to join on Coucal" : "See when everyone's free"
         let message = MSMessage(session: MSSession())
         message.layout = layout
         // The extension recognizes this link; anyone without the app (or on

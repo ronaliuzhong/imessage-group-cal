@@ -1,12 +1,12 @@
 import Foundation
 import Messages
 
-/// Remembers which Group Cal group belongs to which chat, on this device.
+/// Remembers which Coucal group belongs to which chat, on this device.
 ///
 /// Messages doesn't give extensions a chat ID or name, only anonymous IDs for
 /// the people in it, so a chat is recognized by that set of IDs. If someone
 /// joins or leaves the chat, the set changes and the chat is forgotten; tapping
-/// any Group Cal bubble in it links it again.
+/// any Coucal bubble in it links it again.
 enum ConversationStore {
     /// Storage shared through the App Group.
     private static var defaults: UserDefaults {

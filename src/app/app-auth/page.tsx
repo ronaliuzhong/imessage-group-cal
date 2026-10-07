@@ -22,7 +22,7 @@ export default async function AppAuthPage({ searchParams }: PageProps<"/app-auth
 
   return (
     <Shell>
-      <h1 className="text-2xl font-semibold">Sign in to Group Cal</h1>
+      <h1 className="text-2xl font-semibold">Sign in to Coucal</h1>
       <p className="text-zinc-600 dark:text-zinc-400">
         Connect your Google Calendar so your group can see when you&apos;re free. We only ever
         see <strong>busy/free</strong> times, never what your events are.

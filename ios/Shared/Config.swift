@@ -1,7 +1,7 @@
 import Foundation
 
 enum Config {
-    /// The Group Cal server: the Mac's dev server when running from Xcode,
+    /// The Coucal server: the Mac's dev server when running from Xcode,
     /// the live site in release builds. Set per build in project.yml.
     static let apiBaseURL: URL = {
         guard let value = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String,

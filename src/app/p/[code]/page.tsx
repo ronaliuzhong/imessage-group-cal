@@ -29,14 +29,14 @@ type Plan = NonNullable<Awaited<ReturnType<typeof getPlanByShareCode>>>;
 export async function generateMetadata({ params }: PageProps<"/p/[code]">): Promise<Metadata> {
   const { code } = await params;
   const plan = await getPlanByShareCode(code);
-  if (!plan) return { title: "Plan not found · Group Cal" };
+  if (!plan) return { title: "Plan not found · Coucal" };
   const description = plan.cancelledAt
     ? `This plan for ${plan.group.name} was cancelled.`
     : `A plan for ${plan.group.name}. Tap to see when, RSVP, and add it to your calendar.`;
   return {
-    title: `${plan.title} · Group Cal`,
+    title: `${plan.title} · Coucal`,
     description,
-    openGraph: { title: plan.title, description, siteName: "Group Cal" },
+    openGraph: { title: plan.title, description, siteName: "Coucal" },
   };
 }
 
@@ -55,7 +55,7 @@ export default async function PlanPage({ params, searchParams }: PageProps<"/p/[
         <p className="text-zinc-600 dark:text-zinc-400">
           It may have been mistyped, or the group was deleted.
         </p>
-        <Link href="/" className="underline">Go to Group Cal</Link>
+        <Link href="/" className="underline">Go to Coucal</Link>
       </Card>
     );
   }
@@ -82,7 +82,7 @@ export default async function PlanPage({ params, searchParams }: PageProps<"/p/[
         href={isMember ? `/groups/${plan.group.id}` : "/"}
         className="-mb-2 self-start text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
       >
-        ← {isMember ? plan.group.name : "Group Cal"}
+        ← {isMember ? plan.group.name : "Coucal"}
       </Link>
       <div className="flex items-center justify-between gap-4">
         <p className="flex items-center gap-2 text-sm uppercase tracking-wide text-zinc-500">
@@ -319,7 +319,7 @@ function CalendarStatus({ added, canAdd, code }: { added: boolean; canAdd: boole
   if (added) {
     return (
       <p className="text-sm text-emerald-700 dark:text-emerald-400">
-        ✓ On your Google Calendar (in the &quot;Group Cal&quot; calendar).
+        ✓ On your Google Calendar (in the &quot;Coucal&quot; calendar).
       </p>
     );
   }

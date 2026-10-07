@@ -25,7 +25,7 @@ export default async function JoinPage({ params }: PageProps<"/join/[code]">) {
         <p className="text-zinc-600 dark:text-zinc-400">
           Double-check you copied the whole link, or ask for a new one.
         </p>
-        <Link href="/" className="underline">Go to Group Cal</Link>
+        <Link href="/" className="underline">Go to Coucal</Link>
       </Card>
     );
   }

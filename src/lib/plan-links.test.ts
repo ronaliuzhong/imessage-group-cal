@@ -24,9 +24,9 @@ const weekly = { ...plan, repeatFreq: "WEEKLY", repeatWeekdays: [4], repeatCount
 describe("planDescription", () => {
   it("puts notes first, then the group and link", () => {
     expect(planDescription({ ...plan, notes: "Bring snacks" })).toBe(
-      "Bring snacks\n\nRoommates · Planned with Group Cal\nhttps://example.com/p/abc",
+      "Bring snacks\n\nRoommates · Planned with Coucal\nhttps://example.com/p/abc",
     );
-    expect(planDescription(plan)).toBe("Roommates · Planned with Group Cal\nhttps://example.com/p/abc");
+    expect(planDescription(plan)).toBe("Roommates · Planned with Coucal\nhttps://example.com/p/abc");
   });
 });
 
@@ -48,7 +48,7 @@ describe("googleCalendarUrl", () => {
     expect(url.origin + url.pathname).toBe("https://calendar.google.com/calendar/render");
     expect(url.searchParams.get("text")).toBe("Dinner at Joe's");
     expect(url.searchParams.get("dates")).toBe("20261001T230000Z/20261002T013000Z");
-    expect(url.searchParams.get("details")).toBe("Roommates · Planned with Group Cal\nhttps://example.com/p/abc");
+    expect(url.searchParams.get("details")).toBe("Roommates · Planned with Coucal\nhttps://example.com/p/abc");
     expect(url.searchParams.has("location")).toBe(false);
     expect(url.searchParams.has("recur")).toBe(false);
   });
@@ -77,7 +77,7 @@ describe("icsFile", () => {
   });
 
   it("puts the group and link in the description, with the newline escaped", () => {
-    expect(unfold(ics)).toContain("DESCRIPTION:Roommates · Planned with Group Cal\\nhttps://example.com/p/abc\r\n");
+    expect(unfold(ics)).toContain("DESCRIPTION:Roommates · Planned with Coucal\\nhttps://example.com/p/abc\r\n");
   });
 
   it("writes repeating plans in local time with the timezone and a repeat rule", () => {

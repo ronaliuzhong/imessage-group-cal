@@ -2,7 +2,7 @@ import Messages
 import SwiftUI
 
 /// The iMessage extension's entry point: Messages creates this when someone
-/// opens Group Cal in a conversation. The screens themselves are SwiftUI
+/// opens Coucal in a conversation. The screens themselves are SwiftUI
 /// (MessagesRootView); the logic is in ChatModel.
 final class MessagesViewController: MSMessagesAppViewController {
     private let model = ChatModel()
@@ -29,14 +29,14 @@ final class MessagesViewController: MSMessagesAppViewController {
         host.didMove(toParent: self)
     }
 
-    /// Runs each time Group Cal opens in a conversation, including by tapping
+    /// Runs each time Coucal opens in a conversation, including by tapping
     /// one of its bubbles.
     override func willBecomeActive(with conversation: MSConversation) {
         super.willBecomeActive(with: conversation)
         Task { await model.activate(in: conversation) }
     }
 
-    /// A Group Cal bubble was tapped while the extension was already open.
+    /// A Coucal bubble was tapped while the extension was already open.
     override func didSelect(_ message: MSMessage, conversation: MSConversation) {
         super.didSelect(message, conversation: conversation)
         Task { await model.selected(message) }

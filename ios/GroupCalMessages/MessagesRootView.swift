@@ -1,7 +1,7 @@
 import AuthenticationServices
 import SwiftUI
 
-/// Everything Group Cal shows inside a chat. Most people only ever use Group
+/// Everything Coucal shows inside a chat. Most people only ever use Group
 /// Cal here, so they sign in here too (the app and the extension share the
 /// saved sign-in).
 struct MessagesRootView: View {
@@ -17,7 +17,7 @@ struct MessagesRootView: View {
                 Task { await model.signIn(using: webAuthenticationSession) }
             }
         case .unreachable(let message):
-            Problem(title: "Can't reach Group Cal", message: message) {
+            Problem(title: "Can't reach Coucal", message: message) {
                 Task { await model.activateAgain() }
             }
         case .signedIn:
@@ -144,20 +144,20 @@ private struct StartPanel: View {
                 Text(isOneOnOne ? "See when you're both free" : "See when this chat is free")
                     .font(.headline)
                 Text(isOneOnOne
-                    ? "Start Group Cal here and send an invite. Once they tap it, you'll both see each other's free/busy times."
-                    : "Start Group Cal here and send an invite. Everyone who joins shares their free/busy times with the chat.")
+                    ? "Start Coucal here and send an invite. Once they tap it, you'll both see each other's free/busy times."
+                    : "Start Coucal here and send an invite. Everyone who joins shares their free/busy times with the chat.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button("Start Group Cal in this chat", action: onStart)
+                Button("Start Coucal in this chat", action: onStart)
                     .buttonStyle(.borderedProminent)
 
-                Text("Already started? Tap the Group Cal invite in this chat to join.")
+                Text("Already started? Tap the Coucal invite in this chat to join.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
-                // Group Cal can't tell a brand-new chat from one it doesn't
+                // Coucal can't tell a brand-new chat from one it doesn't
                 // recognize anymore (e.g. after reinstalling), so the way to
                 // link an existing group stays tucked behind one small link.
                 if !existingGroups.isEmpty && !showingGroups {
@@ -210,7 +210,7 @@ private struct NameGroupForm: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Name this group")
                 .font(.title3.bold())
-            Text("Shown on the Group Cal website, to tell your groups apart.")
+            Text("Shown on the Coucal website, to tell your groups apart.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             TextField("e.g. Roommates", text: $name)

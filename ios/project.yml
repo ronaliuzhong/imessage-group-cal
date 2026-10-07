@@ -40,15 +40,15 @@ settings:
     # accepts localhost from the Mac), so phones use the live site.
     Debug:
       API_BASE_URL: http://localhost:3000
-      "API_BASE_URL[sdk=iphoneos*]": https://imessage-group-cal.vercel.app
+      "API_BASE_URL[sdk=iphoneos*]": https://coucal.app
     # Release (TestFlight, App Store): the live site.
     Release:
-      API_BASE_URL: https://imessage-group-cal.vercel.app
+      API_BASE_URL: https://coucal.app
 
 # Info.plist entries both targets need.
 infoShared: &infoShared
-  # "Group Cal" is a placeholder until the app is named.
-  CFBundleDisplayName: Group Cal
+  # The name under the icon and in Messages' app list.
+  CFBundleDisplayName: Coucal
   CFBundleShortVersionString: $(MARKETING_VERSION)
   CFBundleVersion: $(CURRENT_PROJECT_VERSION)
   API_BASE_URL: $(API_BASE_URL)
@@ -88,8 +88,8 @@ targets:
     scheme:
       testTargets: [GroupCalTests]
 
-  # The iMessage extension: Group Cal inside a group chat. The main way
-  # people use Group Cal, including signing in.
+  # The iMessage extension: Coucal inside a group chat. The main way
+  # people use Coucal, including signing in.
   GroupCalMessages:
     type: app-extension.messages
     platform: iOS
@@ -119,7 +119,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:
-  # Runs the iMessage extension inside Messages. It builds the Group Cal app
+  # Runs the iMessage extension inside Messages. It builds the Coucal app
   # too: an extension can only be installed inside its app, so on a real
   # iPhone building the extension alone installs nothing.
   GroupCalMessages:

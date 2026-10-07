@@ -1,12 +1,12 @@
-# Group Cal roadmap
+# Coucal roadmap
 
-Group Cal lets a group of friends see when they're all free, using everyone's
+Coucal lets a group of friends see when they're all free, using everyone's
 Google Calendar (free/busy only, never event details), and propose plans in
 that free time.
 
 ## The group chat is the social graph
 
-iMessage group chats already are the social graph Group Cal needs.
+iMessage group chats already are the social graph Coucal needs.
 **Whoever is in a given thread is who we show availability for.** There is
 no separate "add friends" flow and no friend list.
 
@@ -85,8 +85,8 @@ missing and nudge them, instead of the overlap being silently wrong.
 **To check when building Phase 2:** Apple doesn't tell iMessage extensions
 who is in a chat. It gives anonymous IDs, not names or phone numbers.
 - (b) works fully: once someone opens the extension, their ID can be linked
-  to their Group Cal account.
-- (a) may only be possible as a count ("2 people haven't set up Group Cal")
+  to their Coucal account.
+- (a) may only be possible as a count ("2 people haven't set up Coucal")
   in the extension's own screens. Message bubbles can show a participant's
   name using their ID, which may let the bubble name them. Work this out
   early in Phase 2.

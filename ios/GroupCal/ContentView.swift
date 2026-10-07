@@ -23,7 +23,7 @@ struct ContentView: View {
                     }
                 case .unreachable(let message):
                     ContentUnavailableView {
-                        Label("Can't reach Group Cal", systemImage: "wifi.slash")
+                        Label("Can't reach Coucal", systemImage: "wifi.slash")
                     } description: {
                         Text(message)
                     } actions: {
@@ -31,7 +31,7 @@ struct ContentView: View {
                     }
                 }
             }
-            .navigationTitle("Group Cal")
+            .navigationTitle("Coucal")
         }
         .task { await auth.restore() }
     }

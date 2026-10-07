@@ -213,12 +213,12 @@ enum APIError: LocalizedError {
         switch self {
         case .notSignedIn: "You're signed out. Please sign in again."
         case .notFound(let message), .server(let message): message
-        case .badResponse: "Something went wrong talking to Group Cal."
+        case .badResponse: "Something went wrong talking to Coucal."
         }
     }
 }
 
-/// Talks to the Group Cal server's app endpoints (src/app/api/app/).
+/// Talks to the Coucal server's app endpoints (src/app/api/app/).
 struct APIClient {
     var baseURL = Config.apiBaseURL
 
@@ -236,7 +236,7 @@ struct APIClient {
         try await send(authorized(URLRequest(url: baseURL.appending(path: "api/app/me")), token: token))
     }
 
-    /// "Start Group Cal in this chat". A nil name lets the server name it from
+    /// "Start Coucal in this chat". A nil name lets the server name it from
     /// members' first names (for one-on-one chats).
     func createGroup(name: String?, token: String) async throws -> GroupSummary {
         struct Body: Encodable {

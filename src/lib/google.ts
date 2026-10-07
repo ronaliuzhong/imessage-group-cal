@@ -8,7 +8,7 @@ import { decrypt, encrypt } from "@/lib/crypto";
 // - FREEBUSY: busy/free time ranges for a calendar.
 // - CALENDAR_LIST: the list of calendars someone has (names and IDs only),
 //   so we can include more than their main calendar.
-// - APP_CALENDAR: create a separate "Group Cal" calendar in their account and
+// - APP_CALENDAR: create a separate "Coucal" calendar in their account and
 //   manage events on it — and ONLY on calendars this app created — so plans
 //   they're going to appear in Google Calendar automatically.
 export const FREEBUSY_SCOPE = "https://www.googleapis.com/auth/calendar.freebusy";
@@ -198,7 +198,7 @@ export async function getBusyBlocks(
 }
 
 // ---------------------------------------------------------------------------
-// Events on people's "Group Cal" calendar
+// Events on people's "Coucal" calendar
 //
 // Small building blocks; src/lib/calendar-sync.ts decides what each person's
 // calendar should contain and uses these to make it so. None of them throw:
@@ -218,7 +218,7 @@ export type EventBody = {
   source?: { title: string; url: string };
 };
 
-// Returns the ID of this person's "Group Cal" calendar, creating it the first
+// Returns the ID of this person's "Coucal" calendar, creating it the first
 // time. It's a separate calendar (not their main one) so it gets its own color
 // in Google Calendar and can be hidden or deleted in one go.
 async function getOrCreateAppCalendar(userId: string): Promise<string> {
@@ -228,15 +228,15 @@ async function getOrCreateAppCalendar(userId: string): Promise<string> {
   const res = await googleFetch(userId, `${CALENDAR_API}/calendars`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ summary: "Group Cal", description: "Plans you're going to, added by Group Cal." }),
+    body: JSON.stringify({ summary: "Coucal", description: "Plans you're going to, added by Coucal." }),
   });
-  if (!res.ok) throw new Error(`Couldn't create Group Cal calendar: ${res.status}`);
+  if (!res.ok) throw new Error(`Couldn't create Coucal calendar: ${res.status}`);
   const { id } = (await res.json()) as { id: string };
   await prisma.user.update({ where: { id: userId }, data: { appCalendarId: id } });
   return id;
 }
 
-// Calls the Calendar API for an event on this person's Group Cal calendar.
+// Calls the Calendar API for an event on this person's Coucal calendar.
 // Returns null if they haven't granted the permission or have no calendar yet.
 async function eventRequest(userId: string, path: string, init: { method: string; body?: string }): Promise<Response | null> {
   if (!(await getGrantedScopes(userId)).appCalendar) return null;
@@ -263,7 +263,7 @@ export async function insertEvent(userId: string, body: EventBody): Promise<stri
       });
 
     let res = await insert(await getOrCreateAppCalendar(userId));
-    // 404 = they deleted the Group Cal calendar in Google Calendar. Forget it,
+    // 404 = they deleted the Coucal calendar in Google Calendar. Forget it,
     // make a new one, and try once more.
     if (res.status === 404) {
       await prisma.user.update({ where: { id: userId }, data: { appCalendarId: null } });

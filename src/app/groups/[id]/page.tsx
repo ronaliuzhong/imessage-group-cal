@@ -102,7 +102,7 @@ export default async function GroupPage({ params, searchParams }: PageProps<"/gr
       {notConnected.length > 0 && (
         <p className="rounded-lg bg-zinc-100 px-4 py-2 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
           Not included (calendar not connected):{" "}
-          {notConnected.map((m) => m.name).join(", ")}. Ask them to open Group Cal and sign in again.
+          {notConnected.map((m) => m.name).join(", ")}. Ask them to open Coucal and sign in again.
         </p>
       )}
 

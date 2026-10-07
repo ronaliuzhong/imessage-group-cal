@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Group Cal",
+  title: "Coucal",
   description: "See when your friends are free, straight from Google Calendar.",
 };
 

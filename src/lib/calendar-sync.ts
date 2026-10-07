@@ -1,4 +1,4 @@
-// Keeps each person's "Group Cal" Google calendar in step with their plan
+// Keeps each person's "Coucal" Google calendar in step with their plan
 // RSVPs. Rather than tracking every little change, `syncPlanForUser` looks at
 // what the database says they're going to and makes Google match:
 //
@@ -43,7 +43,7 @@ function common(ctx: EventContext, details: { title: string; location: string | 
     // "" clears a location that was there before (PUT/PATCH).
     location: details.location ?? "",
     colorId: ctx.colorId,
-    source: { title: "Group Cal", url: ctx.url },
+    source: { title: "Coucal", url: ctx.url },
   };
 }
 

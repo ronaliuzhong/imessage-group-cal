@@ -57,7 +57,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           {me.busy && missing.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-700 dark:bg-amber-950">
               <div>
-                <p>Reconnect Google so Group Cal can:</p>
+                <p>Reconnect Google so Coucal can:</p>
                 <ul className="list-disc pl-5">
                   {missing.map((reason) => (
                     <li key={String(reason)}>{reason}</li>
@@ -137,7 +137,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 function Landing() {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-12 sm:px-6 sm:py-24">
-      <h1 className="text-4xl font-semibold tracking-tight">Group Cal</h1>
+      <h1 className="text-4xl font-semibold tracking-tight">Coucal</h1>
       <p className="text-lg text-zinc-600 dark:text-zinc-400">
         See when your friends are free — pulled straight from everyone&apos;s Google Calendar.
         No polls to fill out. We only ever see <strong>busy/free</strong> times, never what
