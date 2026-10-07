@@ -32,6 +32,7 @@ model User {
   occurrenceRsvps OccurrenceRsvp[]
   appAuthCodes  AppAuthCode[]
   appTokens     AppToken[]
+  planColors    PlanColor[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -174,7 +175,9 @@ model GroupMember {
 model Plan {
   id          String   @id @default(cuid())
   groupId     String
-  createdById String
+  // Who proposed it; null once they've deleted their account (the plan stays
+  // for the rest of the group).
+  createdById String?
   title       String
   location    String?
   notes       String?
@@ -208,10 +211,11 @@ model Plan {
   occurrenceRsvps OccurrenceRsvp[]
   exceptions  PlanException[]
   cancelUndos CancelUndo[]
+  colors      PlanColor[]
   createdAt   DateTime @default(now())
 
   group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdBy User  @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([groupId, seriesEnd]) // fast "upcoming plans for this group" lookups
 }
@@ -283,4 +287,18 @@ model OccurrenceRsvp {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([planId, userId, originalStart])
+}
+
+// Someone's own color for one plan (only they see it, in Coucal and on their
+// Google Calendar), overriding their color for its group. No row = the
+// group color.
+model PlanColor {
+  planId String
+  userId String
+  color  String // a preset ID or "#rrggbb", like GroupMember.color
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([planId, userId])
 }

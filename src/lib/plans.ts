@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { viewerGroupColor, type GroupColor } from "@/lib/colors";
+import { viewerPlanColor, type GroupColor } from "@/lib/colors";
 import { prisma } from "@/lib/db";
 import { resolvedOccurrencesBetween, responseFor, responsesFor, ruleOf } from "@/lib/plan-occurrences";
 import { repeatLabel } from "@/lib/recurrence";
@@ -61,12 +61,14 @@ export async function loadCalendarPlans({
       exceptions: true,
       rsvps: { include: { user: userSelect } },
       occurrenceRsvps: { include: { user: userSelect } },
+      // The viewer's own color for this plan, if they picked one.
+      colors: { where: { userId: viewerId }, select: { color: true } },
     },
   });
 
   return plans.flatMap((plan) => {
     const label = repeatLabel(ruleOf(plan));
-    const color = viewerGroupColor(plan.group, plan.group.members[0]);
+    const color = viewerPlanColor(plan.group, plan.group.members[0], plan.colors[0]);
     return resolvedOccurrencesBetween(plan, plan.exceptions, timeMin, timeMax).flatMap((o) => {
       const myResponse = responseFor(viewerId, o.originalStart, plan.rsvps, plan.occurrenceRsvps);
       if (hideDeclined && myResponse === "NOT_GOING") return [];

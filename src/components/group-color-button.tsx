@@ -1,13 +1,51 @@
 "use client";
 
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { setMyGroupColor } from "@/app/actions";
+import { setMyGroupColor, setMyPlanColor } from "@/app/actions";
 import { GROUP_COLORS, groupColor, nearestPreset, type GroupColor } from "@/lib/colors";
 
 // The group's color dot. Clicking it opens a picker with Google's preset
 // colors plus a custom color wheel. The choice is personal: only the viewer
 // sees it (in the app and on their own Google Calendar).
 export function GroupColorButton({ groupId, color }: { groupId: string; color: GroupColor }) {
+  return <ColorChoiceButton color={color} what="group" onSave={(value) => setMyGroupColor(groupId, value)} />;
+}
+
+// The same for one plan: your color for it, overriding your group color
+// (`groupColor`), with a way back to the group color.
+export function PlanColorButton({
+  planId,
+  color,
+  groupColor: fallback,
+  hasOwnColor,
+}: {
+  planId: string;
+  color: GroupColor;
+  groupColor: GroupColor;
+  hasOwnColor: boolean;
+}) {
+  return (
+    <ColorChoiceButton
+      color={color}
+      what="plan"
+      onSave={(value) => setMyPlanColor(planId, value)}
+      reset={hasOwnColor ? { color: fallback, onReset: () => setMyPlanColor(planId, null) } : undefined}
+    />
+  );
+}
+
+function ColorChoiceButton({
+  color,
+  what,
+  onSave,
+  reset,
+}: {
+  color: GroupColor;
+  what: "group" | "plan";
+  onSave: (value: string) => Promise<void>;
+  // "Use group color", for plans with their own color.
+  reset?: { color: GroupColor; onReset: () => Promise<void> };
+}) {
   const [open, setOpen] = useState(false);
   // useOptimistic shows the new color right away, before the server (which
   // also recolors your Google Calendar events) has finished saving.
@@ -39,7 +77,7 @@ export function GroupColorButton({ groupId, color }: { groupId: string; color: G
   function save(value: string) {
     startTransition(async () => {
       setShownValue(value);
-      await setMyGroupColor(groupId, value);
+      await onSave(value);
     });
   }
 
@@ -50,7 +88,7 @@ export function GroupColorButton({ groupId, color }: { groupId: string; color: G
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-label="Change your color for this group"
+        aria-label={`Change your color for this ${what}`}
         aria-expanded={open}
         title="Change your color"
         className="h-4 w-4 rounded-full ring-zinc-400 ring-offset-2 transition hover:ring-2 dark:ring-offset-zinc-950"
@@ -60,14 +98,16 @@ export function GroupColorButton({ groupId, color }: { groupId: string; color: G
       {open && (
         <div
           role="dialog"
-          aria-label="Your color for this group"
+          aria-label={`Your color for this ${what}`}
           className="absolute left-0 top-full z-30 mt-2 w-64 rounded-xl border border-zinc-200 bg-white p-3 text-sm font-normal shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
         >
           <div className="flex items-baseline justify-between">
             <p className="font-medium">Your color</p>
             {saving && <span className="text-xs text-zinc-500">Saving…</span>}
           </div>
-          <p className="text-xs text-zinc-500">Only you see it.</p>
+          <p className="text-xs text-zinc-500">
+            Only you see it{what === "plan" ? ", here and in your Google Calendar" : ""}.
+          </p>
 
           <div className="mt-3 grid grid-cols-6 gap-2">
             {GROUP_COLORS.map((preset) => {
@@ -116,6 +156,20 @@ export function GroupColorButton({ groupId, color }: { groupId: string; color: G
               <p className="text-xs text-zinc-500">
                 Shows as {nearestPreset(shown.hex).name} in Google Calendar.
               </p>
+            )}
+            {reset && (
+              <button
+                type="button"
+                onClick={() =>
+                  startTransition(async () => {
+                    setShownValue(reset.color.id);
+                    await reset.onReset();
+                  })
+                }
+                className="self-start text-xs text-zinc-500 underline"
+              >
+                Use group color
+              </button>
             )}
           </div>
         </div>

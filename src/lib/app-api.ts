@@ -1,4 +1,5 @@
 import { appUserFrom } from "@/lib/app-auth";
+import { viewerGroupColor, viewerPlanColor, type GroupColor } from "@/lib/colors";
 import { prisma } from "@/lib/db";
 import type { RepeatInput } from "@/lib/plan-input";
 import { occurrenceToShow, responseFor, responsesFor, ruleOf } from "@/lib/plan-occurrences";
@@ -37,8 +38,9 @@ export async function planSummary(shareCode: string, viewerId: string, at?: Date
   const plan = await prisma.plan.findUnique({
     where: { shareCode },
     include: {
-      group: { select: { id: true, name: true, members: { select: { userId: true } } } },
+      group: { select: { id: true, name: true, color: true, members: { select: { userId: true, color: true } } } },
       exceptions: true,
+      colors: { where: { userId: viewerId }, select: { color: true } },
       rsvps: { include: { user } },
       occurrenceRsvps: { include: { user } },
     },
@@ -54,6 +56,8 @@ export async function planSummary(shareCode: string, viewerId: string, at?: Date
   });
   const repeats = plan.repeatFreq !== null;
   const originalStart = shown.originalStart.toISOString();
+  const membership = plan.group.members.find((m) => m.userId === viewerId);
+  const shade = (c: GroupColor) => ({ id: c.id, name: c.name, hex: c.hex, text: c.text });
   return {
     id: plan.id,
     shareCode: plan.shareCode,
@@ -64,7 +68,12 @@ export async function planSummary(shareCode: string, viewerId: string, at?: Date
     notes: shown.notes,
     groupId: plan.group.id,
     groupName: plan.group.name,
-    inGroup: plan.group.members.some((m) => m.userId === viewerId),
+    inGroup: membership !== undefined,
+    // The viewer's color for this plan (their own pick, else their group
+    // color), the group color to go back to, and whether they picked one.
+    color: shade(viewerPlanColor(plan.group, membership, plan.colors[0])),
+    groupColor: shade(viewerGroupColor(plan.group, membership)),
+    hasOwnColor: plan.colors.length > 0,
     repeats,
     cancelled: plan.cancelledAt !== null,
     going: going.map(person),

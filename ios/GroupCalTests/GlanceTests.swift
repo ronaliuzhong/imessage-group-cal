@@ -65,6 +65,18 @@ struct GlanceTests {
         #expect(availability.busyMembers(from: at(23), to: at(25)) == nil)
     }
 
+    @Test func joinsEachPersonsBusyTimeIntoStretches() {
+        // You: busy 9–11 and 11–12 (split because Sam's status changed) → 9–12.
+        #expect(availability.busyStretches(of: "you", from: at(0), to: at(24))
+            == [DateInterval(start: at(9), end: at(12))])
+        #expect(availability.busyStretches(of: "sam", from: at(0), to: at(24))
+            == [DateInterval(start: at(11), end: at(14))])
+        // Clipped to the range asked for.
+        #expect(availability.busyStretches(of: "you", from: at(10), to: at(11.5))
+            == [DateInterval(start: at(10), end: at(11.5))])
+        #expect(availability.busyStretches(of: "jo", from: at(0), to: at(24)).isEmpty)
+    }
+
     @Test func countsWhoIsFree() {
         let a = availability
         #expect(a.connectedMembers.map(\.id) == ["you", "sam"])

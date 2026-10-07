@@ -32,6 +32,9 @@ struct ProposeForm: View {
     /// The "Custom…" settings (kept while switching presets back and forth).
     @State private var custom: RepeatRule
     @State private var askingScope = false
+    @State private var places = LocationSearch()
+    /// The suggestion just picked, so picking it doesn't search again.
+    @State private var pickedLocation: String?
     @FocusState private var titleFocused: Bool
 
     private static let lengths = [30, 60, 90, 120, 180, 240]
@@ -112,8 +115,33 @@ struct ProposeForm: View {
                 if preset == .custom {
                     CustomRepeatEditor(rule: $custom, start: start)
                 }
-                TextField("Location (optional)", text: $location)
-                    .textFieldStyle(.roundedBorder)
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("Location (optional)", text: $location)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: location) {
+                            if location != pickedLocation { places.update(location) }
+                        }
+                    ForEach(places.suggestions) { place in
+                        Button {
+                            pickedLocation = place.text
+                            location = place.text
+                            places.clear()
+                        } label: {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "mappin.circle.fill").foregroundStyle(.red)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(place.title).foregroundStyle(.primary)
+                                    if !place.subtitle.isEmpty {
+                                        Text(place.subtitle).font(.footnote).foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
                 busyWarning
                 HStack {
                     Button("Cancel", action: onCancel)
@@ -298,6 +326,10 @@ struct PlanView: View {
     let onAnswer: (_ response: PlanSummary.Response, _ justThisDate: Bool) -> Void
     let onBack: () -> Void
     let onEdit: () -> Void
+    /// Opens a link (Apple Maps for the location) from inside Messages.
+    let onOpenURL: (URL) -> Void
+    /// Your color for the plan (nil = back to your group color).
+    let onSetColor: (String?) -> Void
 
     /// Waiting for "just this date or all of them".
     @State private var pendingAnswer: PlanSummary.Response?
@@ -334,9 +366,12 @@ struct PlanView: View {
                             .foregroundStyle(.secondary)
                     }
                     if let location = plan.location {
-                        Label(location, systemImage: "mappin.and.ellipse")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        // Tapping opens it in Apple Maps.
+                        Button { onOpenURL(LocationSearch.mapsURL(for: location)) } label: {
+                            Label(location, systemImage: "mappin.and.ellipse")
+                                .font(.subheadline)
+                                .multilineTextAlignment(.leading)
+                        }
                     }
                     if let notes = plan.notes {
                         Text(notes)
@@ -353,6 +388,9 @@ struct PlanView: View {
                 }
 
                 people
+                if !plan.cancelled {
+                    colorPicker
+                }
             }
             .padding()
         }
@@ -415,5 +453,41 @@ struct PlanView: View {
 
     private func names(_ people: [PlanSummary.Person]) -> String {
         people.map { $0.isYou ? "You" : $0.name }.joined(separator: ", ")
+    }
+
+    /// Your own color for this plan, like the group colors on the website.
+    private var colorPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Your color").font(.headline)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(CalendarColors.presets) { preset in
+                        let chosen = plan.color.id == preset.id
+                        Button { if !chosen { onSetColor(preset.id) } } label: {
+                            Circle()
+                                .fill(Color(hex: preset.hex))
+                                .frame(width: 30, height: 30)
+                                .overlay(Circle().strokeBorder(Color.primary, lineWidth: chosen ? 2.5 : 0).padding(-4))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(preset.name)
+                        .accessibilityAddTraits(chosen ? .isSelected : [])
+                    }
+                }
+                .padding(6)
+            }
+            HStack {
+                Text(plan.hasOwnColor
+                    ? "Only you see it, here and in your Google Calendar."
+                    : "Using your group color. Pick one just for this plan.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if plan.hasOwnColor {
+                    Button("Group color") { onSetColor(nil) }
+                        .font(.footnote)
+                }
+            }
+        }
     }
 }

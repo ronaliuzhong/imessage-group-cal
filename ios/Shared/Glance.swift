@@ -43,6 +43,22 @@ extension Availability {
         return connectedMembers.filter { busyIds.contains($0.id) }
     }
 
+    /// When `memberId` is busy between `start` and `end`, as unbroken
+    /// stretches: back-to-back segments where they're busy are joined (the
+    /// segments also split whenever anyone else's status changes).
+    func busyStretches(of memberId: String, from start: Date, to end: Date) -> [DateInterval] {
+        var stretches: [DateInterval] = []
+        for segment in segments where segment.busyMemberIds.contains(memberId) && segment.end > start && segment.start < end {
+            let piece = DateInterval(start: max(segment.start, start), end: min(segment.end, end))
+            if let last = stretches.last, last.end >= piece.start {
+                stretches[stretches.count - 1] = DateInterval(start: last.start, end: max(last.end, piece.end))
+            } else {
+                stretches.append(piece)
+            }
+        }
+        return stretches
+    }
+
     /// How many connected members are free during `segment`.
     func freeCount(in segment: Segment) -> Int {
         connectedMembers.count - segment.busyMemberIds.count

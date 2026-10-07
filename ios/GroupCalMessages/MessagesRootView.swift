@@ -57,7 +57,9 @@ struct MessagesRootView: View {
                 onInvite: { Task { await model.sendInvite(for: availability.group) } },
                 onRefresh: { Task { await model.load() } },
                 onPropose: { start, minutes in model.beginProposal(at: start, minutes: minutes) },
-                onOpenPlan: { code, date in Task { await model.openPlan(shareCode: code, date: date) } }
+                onOpenPlan: { code, date in Task { await model.openPlan(shareCode: code, date: date) } },
+                onSignOut: { Task { await model.auth.signOut() } },
+                onDeleteAccount: { await model.auth.deleteAccount() }
             )
         case .proposing(let start, let minutes):
             ProposeForm(
@@ -73,7 +75,9 @@ struct MessagesRootView: View {
                 isAnswering: model.isAnswering,
                 onAnswer: { response, justThisDate in Task { await model.answer(response, justThisDate: justThisDate) } },
                 onBack: { Task { await model.backToCalendar() } },
-                onEdit: { model.beginEdit() }
+                onEdit: { model.beginEdit() },
+                onOpenURL: { model.openURL($0) },
+                onSetColor: { color in Task { await model.setPlanColor(color) } }
             )
         case .editing(let plan):
             ProposeForm(

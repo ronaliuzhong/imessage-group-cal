@@ -87,6 +87,22 @@ struct PlanSummary: Decodable, Equatable, Sendable {
     let repeatLabel: String?
     /// How it repeats, for editing; nil if it doesn't.
     let `repeat`: RepeatRule?
+
+    /// A color as the server describes it.
+    struct Shade: Decodable, Equatable, Sendable {
+        /// A preset's Google colorId, or "#rrggbb" for a custom color.
+        let id: String
+        let name: String
+        let hex: String
+        let text: String
+    }
+
+    /// Your color for this plan: your own pick, else your group color.
+    let color: Shade
+    /// Your group color (what "Group color" goes back to).
+    let groupColor: Shade
+    /// Whether you picked a color for just this plan.
+    let hasOwnColor: Bool
 }
 
 /// For repeating plans: which dates an edit applies to.
@@ -322,6 +338,37 @@ struct APIClient {
             scope: justThisDate ? "this" : "all"
         )
         let response: PlanResponse = try await send(postJSON("api/app/plans/\(shareCode)/rsvp", body, token: token))
+        return response.plan
+    }
+
+    /// Deletes the account for good (see src/lib/account.ts on the server).
+    func deleteAccount(token: String) async throws {
+        var request = authorized(URLRequest(url: baseURL.appending(path: "api/app/account")), token: token)
+        request.httpMethod = "DELETE"
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.badResponse }
+        if http.statusCode == 401 { throw APIError.notSignedIn }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = try? JSONDecoder().decode([String: String].self, from: data)["error"]
+            throw message.map(APIError.server) ?? APIError.badResponse
+        }
+    }
+
+    /// Your own color for a plan (nil = back to your group color). Only you
+    /// see it, in Coucal and on your Google Calendar.
+    func setPlanColor(shareCode: String, color: String?, occurrence: Date?, token: String) async throws -> PlanSummary {
+        struct Body: Encodable {
+            let color: String?
+            let occurrence: String?
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(color, forKey: .color) // null = group color
+                try c.encodeIfPresent(occurrence, forKey: .occurrence)
+            }
+            enum CodingKeys: String, CodingKey { case color, occurrence }
+        }
+        let body = Body(color: color, occurrence: occurrence?.formatted(Date.ISO8601FormatStyle()))
+        let response: PlanResponse = try await send(postJSON("api/app/plans/\(shareCode)/color", body, token: token))
         return response.plan
     }
 

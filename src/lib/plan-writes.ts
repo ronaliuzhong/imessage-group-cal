@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Plan } from "@/generated/prisma/client";
 import { syncPlanForUser } from "@/lib/calendar-sync";
+import { normalizeColor } from "@/lib/colors";
 import { prisma } from "@/lib/db";
 import { deleteEvent } from "@/lib/google";
 import { parsePlanInput, type PlanInput } from "@/lib/plan-input";
@@ -85,3 +86,25 @@ export async function setRsvpFor(
   await syncPlanForUser(planId, userId);
   return true;
 }
+
+// Someone's own color for a plan (null = back to their group color). Only
+// they see it; their Google Calendar event is recolored to match. Returns
+// false if there's no such plan.
+export async function setPlanColorFor(userId: string, planId: string, value: string | null) {
+  const plan = await prisma.plan.findUnique({ where: { id: planId }, select: { id: true } });
+  if (!plan) return false;
+  if (value === null) {
+    await prisma.planColor.deleteMany({ where: { planId, userId } });
+  } else {
+    // normalizeColor() turns anything unrecognized into the default.
+    const color = normalizeColor(value);
+    await prisma.planColor.upsert({
+      where: { planId_userId: { planId, userId } },
+      create: { planId, userId, color },
+      update: { color },
+    });
+  }
+  await syncPlanForUser(planId, userId);
+  return true;
+}
+

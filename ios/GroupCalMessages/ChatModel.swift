@@ -77,6 +77,8 @@ final class ChatModel {
     var insertMessage: @MainActor (MSMessage) async throws -> Void = { _ in }
     /// Sends right away (no tap on send), for updating a plan bubble.
     var sendMessage: @MainActor (MSMessage) async throws -> Void = { _ in }
+    /// Opens a link outside Messages (e.g. a location in Apple Maps).
+    var openURL: @MainActor (URL) -> Void = { _ in }
 
     private let api = APIClient()
     private var conversationKey: String?
@@ -341,6 +343,19 @@ final class ChatModel {
         planSession = nil
         requestStyle(.expanded)
         await load()
+    }
+
+    /// Your own color for the plan on screen (nil = your group color). Personal,
+    /// so the bubble in the chat doesn't change.
+    func setPlanColor(_ color: String?) async {
+        guard case .plan(let current) = screen, let token = TokenStore.read() else { return }
+        do {
+            screen = .plan(try await api.setPlanColor(
+                shareCode: current.shareCode, color: color, occurrence: current.originalStart, token: token
+            ))
+        } catch {
+            screen = .problem(error.localizedDescription)
+        }
     }
 
     /// From a plan back to the chat's calendar.

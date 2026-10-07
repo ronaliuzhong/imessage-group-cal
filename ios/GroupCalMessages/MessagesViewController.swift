@@ -20,6 +20,10 @@ final class MessagesViewController: MSMessagesAppViewController {
             guard let conversation = self?.activeConversation else { return }
             try await conversation.send(message)
         }
+        model.openURL = { [weak self] url in
+            // Extensions can't open other apps directly; this asks Messages to.
+            self?.extensionContext?.open(url)
+        }
 
         let host = UIHostingController(rootView: MessagesRootView(model: model))
         addChild(host)

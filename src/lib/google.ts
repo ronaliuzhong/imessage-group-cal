@@ -335,3 +335,38 @@ export async function findInstanceId(
     return null;
   }
 }
+
+// Deletes this person's "Coucal" calendar from their Google account, with
+// every plan on it (for deleting their account). Returns whether it's gone.
+export async function deleteAppCalendar(userId: string): Promise<boolean> {
+  try {
+    const { appCalendarId } = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { appCalendarId: true } });
+    if (!appCalendarId) return true;
+    if (!(await getGrantedScopes(userId)).appCalendar) return false;
+    const res = await googleFetch(userId, `${CALENDAR_API}/calendars/${encodeURIComponent(appCalendarId)}`, { method: "DELETE" });
+    // Already deleted by them counts as gone.
+    return res.ok || res.status === 404 || res.status === 410;
+  } catch (error) {
+    console.error(`Couldn't delete the Coucal calendar for user ${userId}:`, error);
+    return false;
+  }
+}
+
+// Tells Google to forget Coucal's access to this person's account (for
+// deleting their account). Best effort: if it fails, they can still remove
+// Coucal at myaccount.google.com/permissions.
+export async function revokeGoogleAccess(userId: string): Promise<void> {
+  try {
+    const account = await prisma.account.findFirst({ where: { userId, provider: "google" } });
+    const token = account?.refresh_token ?? account?.access_token;
+    if (!token) return;
+    await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: decrypt(token) }),
+    });
+  } catch (error) {
+    console.error(`Couldn't revoke Google access for user ${userId}:`, error);
+  }
+}
+

@@ -11,8 +11,9 @@ import { signIn, signOut } from "@/auth";
 import { removeUserFromPlan, syncPlanForEveryone, syncPlanForUser } from "@/lib/calendar-sync";
 import { normalizeColor } from "@/lib/colors";
 import { prisma } from "@/lib/db";
+import { deleteAccountFor } from "@/lib/account";
 import { createGroupFor, joinGroupFor } from "@/lib/groups";
-import { createPlanFor, parseOccurrence, setRsvpFor } from "@/lib/plan-writes";
+import { createPlanFor, parseOccurrence, setPlanColorFor, setRsvpFor } from "@/lib/plan-writes";
 import {
   dropStaleDates,
   editablePlan,
@@ -30,6 +31,14 @@ export async function signInWithGoogle(redirectTo: string) {
 
 export async function signOutAction() {
   await signOut({ redirectTo: "/" });
+}
+
+// Deletes the signed-in person's account (see src/lib/account.ts). Their
+// session goes with it, so the home page shows the signed-out screen.
+export async function deleteAccount() {
+  const user = await requireUser();
+  await deleteAccountFor(user.id);
+  redirect("/?deleted=1");
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +99,12 @@ export async function setMyGroupColor(groupId: string, value: string) {
   const plans = await prisma.plan.findMany({ where: upcomingIn(groupId), select: { id: true } });
   await Promise.all(plans.map((plan) => syncPlanForUser(plan.id, user.id)));
   revalidatePath("/", "layout");
+}
+
+// Your own color for one plan (null = back to your group color).
+export async function setMyPlanColor(planId: string, value: string | null) {
+  const user = await requireUser();
+  if (await setPlanColorFor(user.id, planId, value)) revalidatePath("/", "layout");
 }
 
 export async function setCalendarIncluded(calendarId: string, included: boolean) {

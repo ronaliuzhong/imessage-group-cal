@@ -1,5 +1,8 @@
 import { headers } from "next/headers";
 
+// Where people can reach the Coucal team (shown on the privacy policy).
+export const CONTACT_EMAIL = "coucal.app@gmail.com";
+
 // This site's address (e.g. "http://localhost:3000"), for links we put inside
 // calendar events. Uses AUTH_URL when it's set; otherwise works it out from
 // the incoming request.

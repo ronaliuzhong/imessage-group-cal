@@ -18,9 +18,11 @@ struct ContentView: View {
                         Task { await auth.signIn(using: webAuthenticationSession) }
                     }
                 case .signedIn(let me):
-                    SignedInView(me: me) {
-                        Task { await auth.signOut() }
-                    }
+                    SignedInView(
+                        me: me,
+                        onSignOut: { Task { await auth.signOut() } },
+                        onDeleteAccount: { await auth.deleteAccount() }
+                    )
                 case .unreachable(let message):
                     ContentUnavailableView {
                         Label("Can't reach Coucal", systemImage: "wifi.slash")
@@ -81,6 +83,11 @@ private struct SignInView: View {
 private struct SignedInView: View {
     let me: Me
     let onSignOut: () -> Void
+    /// Returns an error message if deleting didn't work.
+    let onDeleteAccount: () async -> String?
+
+    @State private var confirmingDelete = false
+    @State private var deleteError: String?
 
     var body: some View {
         List {
@@ -97,8 +104,21 @@ private struct SignedInView: View {
                 }
             }
             Section {
-                Button("Sign out", role: .destructive, action: onSignOut)
+                Button("Sign out", action: onSignOut)
+                Button("Delete account", role: .destructive) { confirmingDelete = true }
             }
+        }
+        .confirmationDialog("Delete your Coucal account?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete account", role: .destructive) {
+                Task { deleteError = await onDeleteAccount() }
+            }
+        } message: {
+            Text(DeleteAccount.explanation)
+        }
+        .alert("Couldn't delete your account", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(deleteError ?? "")
         }
     }
 }

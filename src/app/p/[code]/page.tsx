@@ -6,7 +6,8 @@ import { SignInButton } from "@/components/auth-buttons";
 import { CopyLink } from "@/components/copy-link";
 import { LocalTimeRange } from "@/components/local-time";
 import { RsvpButtons } from "@/components/rsvp-buttons";
-import { viewerGroupColor } from "@/lib/colors";
+import { viewerGroupColor, viewerPlanColor } from "@/lib/colors";
+import { PlanColorButton } from "@/components/group-color-button";
 import { prisma } from "@/lib/db";
 import { getGrantedScopes } from "@/lib/google";
 import { mapsUrl } from "@/lib/plan-links";
@@ -69,8 +70,13 @@ export default async function PlanPage({ params, searchParams }: PageProps<"/p/[
   const repeats = repeatLabel(ruleOf(plan));
   const shown = occurrenceToShow(plan, plan.exceptions, typeof at === "string" ? new Date(at) : null);
   const isPast = shown.end < new Date();
-  // Members see their own color for the group; everyone else the starting one.
-  const color = viewerGroupColor(plan.group, isMember || null);
+  // Members see their own color for the group; everyone else the starting
+  // one. A color picked for just this plan wins over both.
+  const ownPlanColor = viewerId
+    ? await prisma.planColor.findUnique({ where: { planId_userId: { planId: plan.id, userId: viewerId } } })
+    : null;
+  const groupColorForViewer = viewerGroupColor(plan.group, isMember || null);
+  const color = viewerPlanColor(plan.group, isMember || null, ownPlanColor);
   const atParam = repeats ? `?at=${encodeURIComponent(shown.originalStart.toISOString())}` : "";
   const continuedAs = plan.continuedAs[0];
 
@@ -86,7 +92,12 @@ export default async function PlanPage({ params, searchParams }: PageProps<"/p/[
       </Link>
       <div className="flex items-center justify-between gap-4">
         <p className="flex items-center gap-2 text-sm uppercase tracking-wide text-zinc-500">
-          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color.hex }} />
+          {/* Signed in: the dot is your color for this plan; click to change it. */}
+          {viewerId ? (
+            <PlanColorButton planId={plan.id} color={color} groupColor={groupColorForViewer} hasOwnColor={Boolean(ownPlanColor)} />
+          ) : (
+            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color.hex }} />
+          )}
           {plan.group.name}
         </p>
         {isMember && !plan.cancelledAt && (
@@ -140,7 +151,7 @@ export default async function PlanPage({ params, searchParams }: PageProps<"/p/[
       </div>
       {shown.notes && <p className="whitespace-pre-line text-zinc-700 dark:text-zinc-300">{shown.notes}</p>}
       <p className="text-sm text-zinc-500">
-        Proposed by {plan.createdBy.name ?? plan.createdBy.email}
+        Proposed by {plan.createdBy ? (plan.createdBy.name ?? plan.createdBy.email) : "a former member"}
         {isPast && " · This has already happened."}
       </p>
 

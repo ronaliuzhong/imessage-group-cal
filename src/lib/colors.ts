@@ -100,3 +100,13 @@ export function viewerGroupColor(
 ): GroupColor {
   return groupColor(membership?.color ?? group.color);
 }
+
+// The color a particular person sees a plan in: their own pick for that plan,
+// else their color for its group.
+export function viewerPlanColor(
+  group: { color: string },
+  membership: { color: string | null } | null | undefined,
+  planColor: { color: string } | null | undefined,
+): GroupColor {
+  return groupColor(planColor?.color ?? membership?.color ?? group.color);
+}

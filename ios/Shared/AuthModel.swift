@@ -72,6 +72,22 @@ final class AuthModel {
         }
     }
 
+    /// Deletes the account on the server, then forgets the sign-in here.
+    /// Returns an error message if it didn't work.
+    func deleteAccount() async -> String? {
+        guard let token = TokenStore.read() else { return nil }
+        do {
+            try await api.deleteAccount(token: token)
+        } catch APIError.notSignedIn {
+            // Already gone on the server.
+        } catch {
+            return error.localizedDescription
+        }
+        TokenStore.delete()
+        state = .signedOut
+        return nil
+    }
+
     func signOut() async {
         if let token = TokenStore.read() {
             await api.signOut(token: token)
@@ -79,4 +95,13 @@ final class AuthModel {
         TokenStore.delete()
         state = .signedOut
     }
+}
+
+enum DeleteAccount {
+    /// What deleting does, shown before confirming (matches the privacy policy).
+    static let explanation = """
+        This deletes your account and answers, removes the Coucal calendar from your Google Calendar, \
+        and removes groups where you're the last member. Plans you proposed stay for the rest of the group. \
+        It can't be undone.
+        """
 }

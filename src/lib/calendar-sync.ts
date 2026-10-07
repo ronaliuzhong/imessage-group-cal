@@ -10,7 +10,7 @@
 // Every Google call here is best-effort (see src/lib/google.ts): a failure is
 // logged and the rest carries on; the next sync tries again.
 
-import { viewerGroupColor } from "@/lib/colors";
+import { viewerPlanColor } from "@/lib/colors";
 import { prisma } from "@/lib/db";
 import {
   deleteEvent,
@@ -75,18 +75,20 @@ function occurrenceBody(ctx: EventContext, occurrence: ResolvedOccurrence): Even
 export async function syncPlanForUser(planId: string, userId: string): Promise<void> {
   const plan = await loadPlan(planId);
   if (!plan) return;
-  const [rsvp, dateRsvps, membership] = await Promise.all([
+  const [rsvp, dateRsvps, membership, planColor] = await Promise.all([
     prisma.rsvp.findUnique({ where: { planId_userId: { planId, userId } } }),
     prisma.occurrenceRsvp.findMany({ where: { planId, userId } }),
     prisma.groupMember.findUnique({
       where: { groupId_userId: { groupId: plan.groupId, userId } },
       select: { color: true },
     }),
+    prisma.planColor.findUnique({ where: { planId_userId: { planId, userId } }, select: { color: true } }),
   ]);
   const ctx: EventContext = {
     plan,
-    // Their own color for the group (the starting color if they aren't in it).
-    colorId: viewerGroupColor(plan.group, membership).googleColorId,
+    // Their own color for this plan, else for the group (the starting color
+    // if they aren't in it).
+    colorId: viewerPlanColor(plan.group, membership, planColor).googleColorId,
     url: `${await siteOrigin()}/p/${plan.shareCode}`,
   };
 

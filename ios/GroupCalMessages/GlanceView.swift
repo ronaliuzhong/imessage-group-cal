@@ -20,6 +20,9 @@ struct GlanceView: View {
     let onPropose: (Date?, Int?) -> Void
     /// Tapping a plan (on the calendar or in "Upcoming plans").
     let onOpenPlan: (_ shareCode: String, _ date: Date) -> Void
+    let onSignOut: () -> Void
+    /// Returns an error message if deleting didn't work.
+    let onDeleteAccount: () async -> String?
 
     var body: some View {
         GeometryReader { panel in
@@ -32,7 +35,8 @@ struct GlanceView: View {
                     // without expanding it.
                     calendarHeight: min(max(panel.size.height - 150, 160), 460),
                     onSpan: onSpan, onMove: onMove, onToday: onToday, onInvite: onInvite, onRefresh: onRefresh,
-                    onPropose: onPropose, onOpenPlan: onOpenPlan
+                    onPropose: onPropose, onOpenPlan: onOpenPlan,
+                    onSignOut: onSignOut, onDeleteAccount: onDeleteAccount
                 )
             }
         }
@@ -56,10 +60,16 @@ struct GlanceContent: View {
     let onRefresh: () -> Void
     let onPropose: (Date?, Int?) -> Void
     let onOpenPlan: (_ shareCode: String, _ date: Date) -> Void
+    let onSignOut: () -> Void
+    /// Returns an error message if deleting didn't work.
+    let onDeleteAccount: () async -> String?
+
+    @State private var confirmingDelete = false
+    @State private var deleteError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack {
+            HStack(spacing: 16) {
                 Text(availability.group.name)
                     .font(.title3.bold())
                 Spacer()
@@ -67,6 +77,25 @@ struct GlanceContent: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .accessibilityLabel("Refresh")
+                Menu {
+                    Button("Sign out", action: onSignOut)
+                    Button("Delete account…", role: .destructive) { confirmingDelete = true }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("Account")
+            }
+            .confirmationDialog("Delete your Coucal account?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Delete account", role: .destructive) {
+                    Task { deleteError = await onDeleteAccount() }
+                }
+            } message: {
+                Text(DeleteAccount.explanation)
+            }
+            .alert("Couldn't delete your account", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+                Button("OK") {}
+            } message: {
+                Text(deleteError ?? "")
             }
             // The calendar comes first; the Day | Week switch sits under it.
             VStack(alignment: .leading, spacing: 12) {
@@ -405,7 +434,17 @@ private struct OverlapGrid: View {
                 // right hour again.
                 .onChange(of: range) { proxy.scrollTo(openingHour, anchor: .top) }
             }
-            if total > 0 {
+            if PersonLanes.applies(compact: compact, people: total) {
+                // Who each column is.
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), alignment: .leading)], alignment: .leading, spacing: 6) {
+                    ForEach(Array(availability.connectedMembers.enumerated()), id: \.element.id) { index, person in
+                        Swatch(color: PersonLanes.color(at: index), label: person.isYou ? "You" : person.name)
+                    }
+                    Swatch(color: .clear, label: "Everyone free")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else if total > 0 {
                 HStack(spacing: 12) {
                     Swatch(color: .clear, label: "Everyone free")
                     if total > 1 {
@@ -506,8 +545,12 @@ private struct DayColumn: View {
                     .offset(y: CGFloat(hour - firstHour) * hourHeight)
                     .frame(maxHeight: .infinity, alignment: .top)
             }
-            ForEach(availability.segments.filter { $0.end > top && $0.start < end }, id: \.start) { segment in
-                block(for: segment, top: top, end: end)
+            if PersonLanes.applies(compact: compact, people: total) {
+                lanes(top: top, end: end)
+            } else {
+                ForEach(availability.segments.filter { $0.end > top && $0.start < end }, id: \.start) { segment in
+                    block(for: segment, top: top, end: end)
+                }
             }
             // Plans, on top of the free/busy view. Tapping one opens it.
             ForEach(availability.plans.filter { $0.end > top && $0.start < end }) { plan in
@@ -608,6 +651,23 @@ private struct DayColumn: View {
             .offset(y: CGFloat(range.lowerBound) / 60 * hourHeight)
     }
 
+    /// Day view: a thin column per person in their own color, showing when
+    /// each one is busy. Gaps across every column are when everyone's free.
+    private func lanes(top: Date, end: Date) -> some View {
+        let people = availability.connectedMembers
+        return GeometryReader { geo in
+            let laneWidth = geo.size.width / CGFloat(people.count)
+            ForEach(Array(people.enumerated()), id: \.element.id) { index, person in
+                ForEach(availability.busyStretches(of: person.id, from: top, to: end), id: \.start) { stretch in
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(PersonLanes.color(at: index))
+                        .frame(width: max(laneWidth - 3, 2), height: y(stretch.end, from: top) - y(stretch.start, from: top))
+                        .offset(x: CGFloat(index) * laneWidth + 1.5, y: y(stretch.start, from: top))
+                }
+            }
+        }
+    }
+
     /// Busy time is drawn as blocks, like events in Google Calendar: the more
     /// people busy, the darker. Empty space means everyone's free.
     static func busyColor(busy: Int, of total: Int) -> Color {
@@ -675,3 +735,25 @@ private struct Swatch: View {
         }
     }
 }
+
+/// The day view's column-per-person layout: who gets which color, and when it
+/// applies (2–6 people; the narrow week view and bigger groups use the gray
+/// "how many are busy" blocks instead).
+enum PersonLanes {
+    static let maxPeople = 6
+
+    /// Distinct from each other and readable in light and dark mode.
+    private static let colors: [Color] = [
+        Color(hex: "#4285F4"), Color(hex: "#F4511E"), Color(hex: "#8E24AA"),
+        Color(hex: "#0B8043"), Color(hex: "#E67C73"), Color(hex: "#795548"),
+    ]
+
+    static func applies(compact: Bool, people: Int) -> Bool {
+        !compact && (2...maxPeople).contains(people)
+    }
+
+    static func color(at index: Int) -> Color {
+        colors[index % colors.count].opacity(0.75)
+    }
+}
+
