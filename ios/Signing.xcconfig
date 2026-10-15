@@ -8,8 +8,8 @@
 //
 // Then run `xcodegen` again. The simulator doesn't need any of this.
 
-// Rona's free Personal Team: apps it installs stop working after 7 days.
-// Switch to the paid Apple Developer team for TestFlight.
+// Rona's Apple Developer Program team (paid, Individual; it kept the same
+// ID when it was upgraded from the free Personal Team in October 2026).
 DEVELOPMENT_TEAM = 2S3HFH76VR
 BUNDLE_ID_PREFIX = com.ronaliuzhong
 
