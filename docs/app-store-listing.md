@@ -84,10 +84,17 @@ usage data. Free/busy times are fetched from Google when a calendar is viewed
 and aren't stored, so they don't count as "collected" under Apple's
 definition.
 
+## Screenshots
+
+Taken on the iPhone 18 Pro Max simulator (1320x2868, the 6.9" size), in this
+order: day view, week view, propose a time, plan, home screen. The same set
+works for the iMessage App screenshots.
+
 ## App Review information
 
-**Sign-in required: Yes.** Make a Google account just for Apple's reviewer
-(not anyone's personal account), turn off 2-Step Verification on it so the
+**Sign-in required: Yes.** Test account: **coucal.inc@gmail.com** (made just
+for Apple's reviewer; don't use it for anything private, and change its
+password after approval). Turn off 2-Step Verification on it so the
 reviewer isn't asked for a code, add a few events to its calendar, sign in to
 Coucal with it once (so it's set up), and put its email and password in the
 "Sign-in information" fields.
