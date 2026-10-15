@@ -84,6 +84,8 @@ targets:
         <<: *infoShared
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # Portrait only, so it always runs full screen (Apple requires saying so).
+        UIRequiresFullScreen: true
     entitlements:
       path: GroupCal/GroupCal.entitlements
       properties: *entitlementsShared
