@@ -327,7 +327,7 @@ private struct RangeNavigator: View {
         case .week:
             let last = calendar.date(byAdding: .day, value: -1, to: range.end)!
             let day = Date.FormatStyle().month(.abbreviated).day()
-            return "\(range.start.formatted(day)) – \(last.formatted(day))"
+            return "\(range.start.formatted(day))–\(last.formatted(day))"
         }
     }
 }
@@ -605,7 +605,7 @@ private struct DayColumn: View {
                         .fontWeight(.semibold)
                         .strikethrough(declined)
                     if !compact, height >= 34 {
-                        Text("\(plan.start.formatted(clock)) – \(plan.end.formatted(clock))")
+                        Text("\(plan.start.formatted(clock))–\(plan.end.formatted(clock))")
                     }
                 }
                 .font(compact ? .caption2 : .caption)
@@ -635,7 +635,7 @@ private struct DayColumn: View {
             .strokeBorder(Color.accentColor, lineWidth: 2)
             .overlay(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(compact ? start.formatted(clock) : "\(start.formatted(clock)) – \(end.formatted(clock))")
+                    Text(compact ? start.formatted(clock) : "\(start.formatted(clock))–\(end.formatted(clock))")
                         .fontWeight(.semibold)
                     if let busy, total > 0 {
                         Text("\(total - busy)/\(total) free")

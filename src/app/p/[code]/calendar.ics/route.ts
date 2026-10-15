@@ -1,4 +1,4 @@
-// GET /p/<code>/calendar.ics — the plan as a calendar file, for "Add to Apple
+// GET /p/<code>/calendar.ics—the plan as a calendar file, for "Add to Apple
 // Calendar". Same access rule as the plan page: anyone with the link.
 import { icsFile } from "@/lib/plan-links";
 import { getPlanByShareCode } from "@/lib/plans";

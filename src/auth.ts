@@ -8,7 +8,7 @@ import { APP_CALENDAR_SCOPE, CALENDAR_LIST_SCOPE, FREEBUSY_SCOPE } from "@/lib/g
 
 // The Prisma adapter saves users, accounts and sessions to our database. We
 // wrap its linkAccount (called the first time someone signs in) so tokens are
-// encrypted before they're written — the stock adapter stores them as-is.
+// encrypted before they're written—the stock adapter stores them as-is.
 const baseAdapter = PrismaAdapter(prisma);
 
 function encryptTokens(account: AdapterAccount): AdapterAccount {

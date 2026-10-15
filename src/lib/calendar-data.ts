@@ -15,7 +15,7 @@ export function parseWeekOffset(value: string | string[] | undefined): number {
 
 // Which time range to ask Google about for a given week. The browser shows
 // Sunday–Saturday in the viewer's timezone, but the server doesn't know that
-// timezone (or even which local day it is — up to ±14h from UTC). So we fetch
+// timezone (or even which local day it is—up to ±14h from UTC). So we fetch
 // generously around "today": from 8 days before (covers the local Sunday, 0–6
 // days back, plus timezone slack) to 3 days after (covers the end of the local
 // Saturday). The browser then picks out exactly the days it displays.

@@ -106,12 +106,12 @@ function rangeFor(press: Press, minute: number) {
   return { start, end: Math.min(Math.max(end, start + DRAG_SNAP_MINUTES), DAY_MINUTES) };
 }
 
-// "Thu, Oct 1 · 7:00 – 9:30 PM" (or with both dates if it spans days).
+// "Thu, Oct 1 · 7:00–9:30 PM" (or with both dates if it spans days).
 function formatRange(start: Date, end: Date) {
   const sameDay = start.toDateString() === end.toDateString() || minutesIntoDay(end) === 0;
   return sameDay
-    ? `${longDate.format(start)} · ${clock.format(start)} – ${clock.format(end)}`
-    : `${longDate.format(start)} ${clock.format(start)} – ${longDate.format(end)} ${clock.format(end)}`;
+    ? `${longDate.format(start)} · ${clock.format(start)}–${clock.format(end)}`
+    : `${longDate.format(start)} ${clock.format(start)}–${longDate.format(end)} ${clock.format(end)}`;
 }
 
 function CalendarGrid({
@@ -390,7 +390,7 @@ function CalendarGrid({
                         <div className="break-words font-semibold sm:truncate">{plan.title}</div>
                         {heightPx >= 34 && (
                           <div className="hidden truncate opacity-90 sm:block">
-                            {clock.format(start)} – {clock.format(end)}
+                            {clock.format(start)}–{clock.format(end)}
                           </div>
                         )}
                       </Link>
@@ -412,7 +412,7 @@ function CalendarGrid({
                     style={{ top: drag.start * MINUTE_PX, height: (drag.end - drag.start) * MINUTE_PX }}
                   >
                     <div>
-                      {clock.format(atMinute(dayStart, drag.start))} – {clock.format(atMinute(dayStart, drag.end))}
+                      {clock.format(atMinute(dayStart, drag.start))}–{clock.format(atMinute(dayStart, drag.end))}
                     </div>
                     {variant === "group" && connected.length > 0 && (
                       <div className="font-normal">
@@ -551,7 +551,7 @@ function WeekNav({ weekOffset, first, last }: { weekOffset: number; first: Date;
   return (
     <div className="flex items-center justify-between">
       <h2 className="text-lg font-medium">
-        {shortDate.format(first)} – {shortDate.format(last)}
+        {shortDate.format(first)}–{shortDate.format(last)}
       </h2>
       <div className="flex gap-2">
         {weekOffset > 0 ? (

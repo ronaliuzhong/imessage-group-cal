@@ -45,7 +45,7 @@ export default async function JoinPage({ params }: PageProps<"/join/[code]">) {
       <h1 className="text-3xl font-semibold">{group.name}</h1>
       <p className="text-zinc-600 dark:text-zinc-400">
         {count} {count === 1 ? "person has" : "people have"} joined. Joining shares when you&apos;re
-        busy or free with this group — never what your events are.
+        busy or free with this group—never what your events are.
       </p>
       {userId ? (
         <form action={joinGroup.bind(null, code)}>

@@ -9,7 +9,7 @@ import { decrypt, encrypt } from "@/lib/crypto";
 // - CALENDAR_LIST: the list of calendars someone has (names and IDs only),
 //   so we can include more than their main calendar.
 // - APP_CALENDAR: create a separate "Coucal" calendar in their account and
-//   manage events on it — and ONLY on calendars this app created — so plans
+//   manage events on it—and ONLY on calendars this app created—so plans
 //   they're going to appear in Google Calendar automatically.
 export const FREEBUSY_SCOPE = "https://www.googleapis.com/auth/calendar.freebusy";
 export const CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
