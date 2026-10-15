@@ -10,6 +10,9 @@ enum Config {
         return url
     }()
 
+    /// Coucal's privacy policy (the same page for every build).
+    static let privacyPolicyURL = URL(string: "https://coucal.app/privacy")!
+
     /// Where the sign-in window hands control back to the app. Must match
     /// APP_CALLBACK_URL in src/lib/app-auth.ts on the server.
     static let callbackScheme = "groupcal"

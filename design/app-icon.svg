@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Coucal's app icon (source for ios/*/Assets.xcassets). Square, no text:
+       the name shows under the icon. Edit here, then regenerate the PNGs. -->
+  <rect width="1024" height="1024" fill="#F6EFE3"/>
+  <g transform="translate(512 528) scale(2.7) translate(-407 -192)">
+    <!-- Head, beak, back and tail: the bird from design/coucal_logo.svg, bolder. -->
+    <circle cx="300" cy="150" r="23" fill="#111111"/>
+    <path d="M 279 153 L 279 142 L 250 148 Z" fill="#111111"/>
+    <path d="M 300 168 C 320 200 360 210 400 205 C 460 198 520 215 560 260" fill="none" stroke="#111111" stroke-width="13" stroke-linecap="round"/>
+    <!-- The folded wing. -->
+    <path d="M 326 196 C 352 160, 420 152, 466 186 C 424 180, 372 186, 326 196 Z" fill="#111111"/>
+  </g>
+</svg>

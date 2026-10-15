@@ -75,6 +75,8 @@ private struct SignInView: View {
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
             }
+            Link("Privacy policy", destination: Config.privacyPolicyURL)
+                .font(.footnote)
         }
         .padding(24)
     }
@@ -91,6 +93,13 @@ private struct SignedInView: View {
 
     var body: some View {
         List {
+            // Coucal lives in Messages; this app is mostly the way in.
+            Section("Use Coucal in Messages") {
+                HowToStep(number: 1, text: "Open a group chat (or a chat with one friend) in Messages.")
+                HowToStep(number: 2, text: "Tap + next to the text box, then Coucal (under More if you don't see it).")
+                HowToStep(number: 3, text: "Start Coucal in the chat and send the invite. Friends join by tapping it.")
+                HowToStep(number: 4, text: "See when everyone's free, then tap or hold-and-drag on the calendar to propose a plan.")
+            }
             Section("Signed in as") {
                 LabeledContent(me.user.name, value: me.user.email)
             }
@@ -104,6 +113,7 @@ private struct SignedInView: View {
                 }
             }
             Section {
+                Link("Privacy policy", destination: Config.privacyPolicyURL)
                 Button("Sign out", action: onSignOut)
                 Button("Delete account", role: .destructive) { confirmingDelete = true }
             }
@@ -126,3 +136,22 @@ private struct SignedInView: View {
 #Preview {
     ContentView()
 }
+
+/// One numbered step of "Use Coucal in Messages".
+private struct HowToStep: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(number)")
+                .font(.footnote.bold())
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.green))
+            Text(text)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
