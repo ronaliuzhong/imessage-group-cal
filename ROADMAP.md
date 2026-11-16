@@ -168,3 +168,33 @@ Steps:
   like an API a native app could call, not tied to the web pages.
 - Plans are added to Google Calendar automatically when someone taps Going,
   so the iMessage extension never has to send people out of Messages.
+
+## Future idea: public events (from inSession)
+
+Added 2026-11-16, to work through later. Not started.
+
+Some events can be marked **public**, so the group sees what the event is
+(not just "busy") and can **request to join**. Example: "Studying 4–8 PM" is
+public, and a friend asks to join.
+
+- **Requesting and approving** each offer a choice: keep the event public or
+  close it.
+- **Kept public:** others can still see it and ask to join. Either the name
+  changes to include who's joined, or the event shows a "who's going" list
+  so people can decide whether to join too.
+- **Closed:** whoever joined stays joined, and everyone else goes back to
+  seeing plain "busy", with no event name and no way to request.
+
+Questions to settle first:
+
+- **Privacy rule:** Coucal shows free/busy only, never event details. Public
+  events are a deliberate, per-event exception chosen by the owner; keep
+  everything else private by default.
+- **Where public events come from:** marking an existing Google Calendar
+  event public would mean reading event details, a *sensitive* Google
+  permission that needs Google's full verification. Creating public events
+  inside Coucal (like plans) avoids that and keeps today's permissions.
+- How it differs from a plan: a plan invites everyone up front; a public
+  event is "I'm doing this anyway, ask if you want in".
+- Where requests and approvals appear: a bubble in the group chat, a
+  notification, or both.

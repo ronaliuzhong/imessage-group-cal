@@ -90,6 +90,7 @@ private struct SignedInView: View {
 
     @State private var confirmingDelete = false
     @State private var deleteError: String?
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         List {
@@ -99,6 +100,17 @@ private struct SignedInView: View {
                 HowToStep(number: 2, text: "Tap + next to the text box, then Coucal (under More if you don't see it).")
                 HowToStep(number: 3, text: "Start Coucal in the chat and send the invite. Friends join by tapping it.")
                 HowToStep(number: 4, text: "See when everyone's free, then tap or hold-and-drag on the calendar to propose a plan.")
+                Button {
+                    openMessages()
+                } label: {
+                    Label("Open Messages", systemImage: "message.fill")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .listRowSeparator(.hidden)
             }
             Section("Signed in as") {
                 LabeledContent(me.user.name, value: me.user.email)
@@ -129,6 +141,14 @@ private struct SignedInView: View {
             Button("OK") {}
         } message: {
             Text(deleteError ?? "")
+        }
+    }
+
+    /// Apps can't open the Coucal panel inside a chat, so this goes to
+    /// Messages' chat list, or a new message if that doesn't work.
+    private func openMessages() {
+        openURL(URL(string: "messages://")!) { opened in
+            if !opened { openURL(URL(string: "sms:")!) }
         }
     }
 }
